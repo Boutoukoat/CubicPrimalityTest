@@ -26,6 +26,9 @@ lex.gmp_expr.o : lex.gmp_expr.c
 lex.gmp_expr.c : parser.l bison.gmp_expr.tab.h
 	flex parser.l
 
+check: cubic
+	./cubic -st
+
 clean:
 	rm -f ./cubic $(OBJ)
 

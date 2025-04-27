@@ -13,6 +13,8 @@ So far, no counterexample (pseudo prime) has been found. i
 ```
 $ make
 
+$ make check
+
 $ ./cubic 2^127-1 2^127+0 2^127+1
 2^127-1 might be prime, time=       0.151 msecs.
 2^127+0 is composite for sure, time=       0.000 msecs.
