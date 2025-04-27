@@ -15,12 +15,18 @@ int main(int argc, char **argv)
 	mpz_t n;
 	mpz_init(n);
 
+	if (argc == 2 && !strcmp(argv[1], "-st")) {
+		cubic_primality_self_test();
+		printf("Self tests completed\n");
+		exit(0);
+	}
+
 	for (int i = 1; i < argc; i++) {
 		struct timespec ts1, ts2;
 
 		// Read an expression from the command line
 		// Supported operators are +/-*^() with usual precedence.
-                mpz_expression_parse(n, argv[i]);
+		mpz_expression_parse(n, argv[i]);
 
 		// gmp_printf("Test n=%Zd.\n",n);
 		clock_gettime(CLOCK_REALTIME, &ts1);
@@ -42,4 +48,3 @@ int main(int argc, char **argv)
 
 	return 0;
 }
-

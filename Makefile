@@ -1,6 +1,6 @@
 
 
-GGG = g++ -O3 -march=native -fomit-frame-pointer -fexpensive-optimizations -flto
+GGG = g++ -O3 -march=native -fomit-frame-pointer -fexpensive-optimizations
 
 OBJ = cubic_primality_main.o cubic_primality.o bison.gmp_expr.o lex.gmp_expr.o
 
