@@ -11,5 +11,5 @@
 #include <stdbool.h>
 #include "gmp.h"
 
-bool cubic_primality(mpz_t v);
+bool mpz_cubic_primality(mpz_t v);
 void cubic_primality_self_test(void);

@@ -5,7 +5,7 @@
     #include <stdlib.h>
     #include "bison.gmp_expr.tab.h" 
 
-char *gmp_expr_lex_data;
+char *gmp_expr_lex_data = 0;
 
 int myinput (char *buf, int buflen) {
     strncpy(buf, gmp_expr_lex_data, buflen);

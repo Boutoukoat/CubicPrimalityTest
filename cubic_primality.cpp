@@ -4,6 +4,7 @@
 
 #include <stdio.h>
 #include <stdint.h>
+#include <math.h>
 #include <assert.h>
 #include "cubic_primality.h"
 
@@ -66,6 +67,54 @@ static bool mpz_perfect_cube(mpz_t n)
 	uint64_t e = mpz_root(u, n, 3);	// u = cuberoot(n), e non zero if computation is exact.
 	mpz_clear(u);
 	return e ? true : false;
+}
+
+// detect a perfect cube after efficient sieving
+static bool uint64_perfect_cube(uint64_t a)
+{
+	if (0x3f7fffe7e7fffefcull & (1ull << (a % 63)))
+		return false;
+	if (0x1fafd7e3f5fafcull & (1ull << (a % 54)))
+		return false;
+	if (0xbcbfd99e66ff4f4ull & (1ull << (a % 61)))
+		return false;
+	if (0x176f79ef6e8ull & (1ull << (a % 43)))
+		return false;
+	if (0xf537fb2bcull & (1ull << (a % 37)))
+		return false;
+	if (0x177e7ee8 & (1 << (a % 31)))
+		return false;
+	if (0x3e67c & (1 << (a % 19)))
+		return false;
+	if (0xedc & (1 << (a % 13)))
+		return false;
+
+	// quick approximation of cubic root with floating point accuracy
+	double d = (double)a;
+	d = exp(log(d) / 3.0);	// cubic root
+	double dl = d * 0.999999;
+	double dh = d * 1.000001;
+	uint64_t c, m;
+
+	// binary search (1 more bit of cube root per iteration)
+	uint64_t r = (uint64_t) d;
+	uint64_t l = (uint64_t) dl;
+	uint64_t h = (uint64_t) dh;
+	while (l <= h) {
+		m = (l + h) >> 1;
+		c = m * m * m;
+		if (c == a) {
+			return true;	// perfect cube
+		}
+		if (c < a) {
+			l = m + 1;
+			r = m;
+		} else {
+			h = m - 1;
+		}
+	}
+	c = r * r * r;		// check perfect cube
+	return (c == a);
 }
 
 // modular exponentiation a^e mod m
@@ -289,17 +338,17 @@ static sieve_t mpz_prime_sieve(mpz_t n)
 static bool uint64_witness(uint64_t n, int s, uint64_t d, uint64_t a)
 {
 	uint64_t x, y;
-	uint128_t t;
+	uint128_t tmp;
 	if (n == a)
 		return true;
 
 	x = uint64_powm(a, d, n);
 
 	while (s) {
-		t = x;
-		t *= x;
-		t %= n;
-		y = t;
+		tmp = x;
+		tmp *= x;
+		tmp %= n;
+		y = tmp;
 		if (y == 1 && x != 1 && x != n - 1)
 			return false;
 		x = y;
@@ -360,7 +409,65 @@ static bool uint64_isprime(uint64_t n)
 	    uint64_witness(n, s, d, 29) && uint64_witness(n, s, d, 31) && uint64_witness(n, s, d, 37);
 }
 
-static void exponentiate(mpz_t s, mpz_t t, mpz_t u, mpz_t e, mpz_t n, uint64_t a)
+static void uint64_exponentiate(uint64_t & s, uint64_t & t, uint64_t & u, uint64_t e, uint64_t n, uint64_t a)
+{
+	int bit = 63 - __builtin_clzll(e);
+	uint64_t s2, t2, u2, st, tu, us, uu, ss, tt;
+	uint128_t tmp;
+
+	while (bit--) {
+		// Double
+		tmp = s;
+		tmp *= s;
+		tmp %= n;
+		tmp %= a;
+		tmp %= n;
+		s2 = tmp;
+		tmp = t;
+		tmp *= t;
+		tmp %= n;
+		t2 = tmp;
+		tmp = u;
+		tmp *= u;
+		tmp %= n;
+		u2 = tmp;
+		tmp = s;
+		tmp *= t;
+		tmp %= n;
+		tmp %= a;
+		tmp %= n;
+		st = tmp;
+		tmp = t;
+		tmp *= u;
+		tmp %= n;
+		tu = tmp;
+		tmp = u;
+		tmp *= s;
+		tmp %= n;
+		us = tmp;
+		st <<= 1;
+		tu <<= 1;
+		us <<= 1;
+		if ((e >> bit) & 1) {
+			// add
+			tmp = us + t2 + s2;
+			tmp *= a;
+			tmp %= n;
+			uu = tmp;
+			ss = s2 + st + tu;
+			tt = u2 + st + uu;
+		} else {
+			ss = s2 + us + t2;
+			tt = s2 + st + tu;
+			uu = u2 + st;
+		}
+		s = ss % n;
+		t = tt % n;
+		u = uu % n;
+	}
+}
+
+static void mpz_exponentiate(mpz_t s, mpz_t t, mpz_t u, mpz_t e, mpz_t n, uint64_t a)
 {
 	int bit = mpz_sizeinbase(e, 2) - 1;
 	mpz_t tmp, s2, t2, u2, st, tu, us, uu, ss, tt;
@@ -402,13 +509,90 @@ static void exponentiate(mpz_t s, mpz_t t, mpz_t u, mpz_t e, mpz_t n, uint64_t a
 	mpz_clears(tmp, s2, t2, u2, st, tu, us, uu, ss, tt, 0);
 }
 
-bool cubic_primality(mpz_t n)
+static bool uint64_cubic_primality(uint64_t n)
 {
-	if (mpz_tstbit(n, 0) == 0)
-	{
-		return false; // even
+	if (n >> 61) {
+		// the cubic test might overflow for numbers > 61 bits along the additions
+		// Better use another slower deterministic test for numbers <= 64 bits
+		return uint64_isprime(n);
 	}
 
+	if ((n & 1) == 0) {
+		return n == 2;	// even
+	}
+	// sieve composites with small factors
+	sieve_t sv = uint64_prime_sieve(n);
+	switch (sv) {
+	case COMPOSITE_FOR_SURE:
+		return false;	// composite
+	case PRIME_FOR_SURE:
+		return true;	// prime
+	case UNDECIDED:
+	default:
+		break;
+	}
+
+	if (uint64_perfect_cube(n)) {
+		return false;	// composite
+	}
+
+	uint64_t k = 0, a, bs, bt, bu;
+
+	while (1) {
+		k += 1;
+		a = 7 + k * (k - 1);
+		if (!uint64_cubic_primality(a)) {
+			continue;	// try another a
+		}
+		if (uint64_powm(n % a, (a - 1) / 3, a) == 1) {
+			continue;	// try another a
+		}
+		if (a == n) {
+			return true;	// small prime
+		}
+		if (k >= 5405) {
+			// overflow, u > 2^64 next line
+			printf("internal overflow, k>5404, a >= 29208627, u > 2^64\n");
+			exit(1);
+		}
+		uint64_t u = (2 * k - 1) * a * (2 * a - 1);
+		uint64_t g = uint64_gcd(u, n);
+		if (g == n) {
+			continue;	// try another a
+		}
+		if (g > 1) {
+			return false;	//  composite
+		}
+		bs = 0;
+		bt = 1;
+		bu = 0;
+		uint64_exponentiate(bs, bt, bu, n - 1, n, a);
+		if (bs == 1 && bt == 0 && bu == 0) {
+			// printf("more loops k %lu a %lu n %lu\n", k, a, n);
+			continue;	// try another a
+		}
+		break;
+	}
+	uint64_t bs2 = bs, bt2 = bt, bu2 = bu;
+	uint64_exponentiate(bs2, bt2, bu2, 2, n, a);
+	bs = (bs + bs2) % n;
+	bt = (bt + bt2) % n;
+	bu = (bu + bu2 + 1) % n;
+	if (bs != n - 1 || bt != 1 || bu != a)
+		return false;	// composite
+	return true;		// might be prime
+}
+
+bool mpz_cubic_primality(mpz_t n)
+{
+	if (mpz_cmp_ui(n, 1ull << 61) < 0) {
+		// the cubic test iwill run in 64 bits calculations
+		return uint64_cubic_primality(mpz_get_ui(n));
+	}
+
+	if (mpz_tstbit(n, 0) == 0) {
+		return (mpz_cmp_ui(n, 2) == 0);	// even
+	}
 	// detects small primes, small composites
 	// detects smooth composites
 	sieve_t sv = mpz_prime_sieve(n);
@@ -445,6 +629,11 @@ bool cubic_primality(mpz_t n)
 			goto done2;
 		}
 
+		if (k >= 5405) {
+			// overflow, u > 2^64 next line
+			printf("internal overflow, k>5404, a >= 29208627, u > 2^64\n");
+			exit(1);
+		}
 		uint64_t u = (2 * k - 1) * a * (2 * a - 1);
 		uint64_t v = mpz_mod_ui(ignore, n, u);
 		uint64_t g = uint64_gcd(u, v);
@@ -456,8 +645,9 @@ bool cubic_primality(mpz_t n)
 		mpz_set_ui(bt, 1);
 		mpz_set_ui(bu, 0);
 		mpz_sub_ui(e, n, 1);
-		exponentiate(bs, bt, bu, e, n, a);
+		mpz_exponentiate(bs, bt, bu, e, n, a);
 		if (mpz_cmp_ui(bs, 1) == 0 && mpz_sgn(bt) == 0 && mpz_sgn(bu) == 0) {
+			// gmp_printf("more loops k %lu a %lu n %Zu\n", k, a, n);
 			continue;	// try another a
 		}
 		break;
@@ -468,7 +658,7 @@ bool cubic_primality(mpz_t n)
 	mpz_init_set(bu2, bu);
 	mpz_set_ui(e, 2);
 
-	exponentiate(bs2, bt2, bu2, e, n, a);
+	mpz_exponentiate(bs2, bt2, bu2, e, n, a);
 	mpz_add(bs, bs, bs2);
 	mpz_add_ui(bs, bs, 1);
 	mpz_mod(bs, bs, n);
