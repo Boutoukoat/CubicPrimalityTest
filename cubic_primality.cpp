@@ -10,6 +10,22 @@
 
 typedef unsigned __int128 uint128_t;
 
+static inline uint64_t mulmod(uint64_t a, uint64_t b, uint64_t n) 
+{
+#if 0
+	uint128_t tmp;
+	tmp = a;
+	tmp *= b;
+	tmp %= n;
+	return tmp;
+#else
+    uint64_t rv;
+    asm ("mul %3" : "=d"(rv), "=a"(a) : "1"(a), "r"(b));
+    asm ("div %4" : "=d"(rv), "=a"(a) : "0"(rv), "1"(a), "r"(n));
+    return rv;
+#endif
+}
+
 // binary gcd algorithm
 static uint64_t uint64_gcd(uint64_t x, uint64_t y)
 {
@@ -123,19 +139,12 @@ static uint64_t uint64_powm(uint64_t a, uint64_t e, uint64_t m)
 	uint64_t n = e;
 	uint64_t b = a;
 	uint64_t result = 1;
-	uint128_t t;
 
 	while (n) {
 		if (n & 1) {
-			t = b;
-			t *= result;
-			t %= m;
-			result = t;
+			result = mulmod(b, result, m);
 		}
-		t = b;
-		t *= b;
-		t %= m;
-		b = t;
+		b = mulmod(b, b, m);
 		n >>= 1;
 	}
 	return result;
@@ -334,126 +343,27 @@ static sieve_t mpz_prime_sieve(mpz_t n)
 	return UNDECIDED;	// might be prime
 }
 
-// Miller-Rabin witness
-static bool uint64_witness(uint64_t n, int s, uint64_t d, uint64_t a)
-{
-	uint64_t x, y;
-	uint128_t tmp;
-	if (n == a)
-		return true;
-
-	x = uint64_powm(a, d, n);
-
-	while (s) {
-		tmp = x;
-		tmp *= x;
-		tmp %= n;
-		y = tmp;
-		if (y == 1 && x != 1 && x != n - 1)
-			return false;
-		x = y;
-		s -= 1;
-	}
-	if (y != 1)
-		return false;
-	return true;
-}
-
-static bool uint64_isprime(uint64_t n)
-{
-	sieve_t sv = uint64_prime_sieve(n);
-	switch (sv) {
-	case COMPOSITE_FOR_SURE:
-		return false;	// composite
-	case PRIME_FOR_SURE:
-		return true;	// prime
-	case UNDECIDED:
-	default:
-		break;
-	}
-
-	uint64_t d = n / 2;
-	int s = 1;
-	while (!(d & 1)) {
-		d /= 2;
-		++s;
-	}
-
-	if (n < 1373653ull)
-		return uint64_witness(n, s, d, 2) && uint64_witness(n, s, d, 3);
-	if (n < 9080191ull)
-		return uint64_witness(n, s, d, 31) && uint64_witness(n, s, d, 73);
-	if (n < 4759123141ull)
-		return uint64_witness(n, s, d, 2) && uint64_witness(n, s, d, 7) && uint64_witness(n, s, d, 61);
-	if (n < 1122004669633ull)
-		return uint64_witness(n, s, d, 2) && uint64_witness(n, s, d, 13) && uint64_witness(n, s, d, 23) &&
-		    uint64_witness(n, s, d, 1662803);
-	if (n < 2152302898747ull)
-		return uint64_witness(n, s, d, 2) && uint64_witness(n, s, d, 3) && uint64_witness(n, s, d, 5) &&
-		    uint64_witness(n, s, d, 7) && uint64_witness(n, s, d, 11);
-	if (n < 3474749660383ull)
-		return uint64_witness(n, s, d, 2) && uint64_witness(n, s, d, 3) && uint64_witness(n, s, d, 5) &&
-		    uint64_witness(n, s, d, 7) && uint64_witness(n, s, d, 11) && uint64_witness(n, s, d, 13);
-	if (n < 341550071728321ull)
-		return uint64_witness(n, s, d, 2) && uint64_witness(n, s, d, 3) && uint64_witness(n, s, d, 5) &&
-		    uint64_witness(n, s, d, 7) && uint64_witness(n, s, d, 11) && uint64_witness(n, s, d, 13) &&
-		    uint64_witness(n, s, d, 17);
-	if (n < 3825123056546413051ull)
-		return uint64_witness(n, s, d, 2) && uint64_witness(n, s, d, 3) && uint64_witness(n, s, d, 5) &&
-		    uint64_witness(n, s, d, 7) && uint64_witness(n, s, d, 11) && uint64_witness(n, s, d, 13) &&
-		    uint64_witness(n, s, d, 17) && uint64_witness(n, s, d, 19) && uint64_witness(n, s, d, 23);
-	// n < 318665857834031151167461
-	return uint64_witness(n, s, d, 2) && uint64_witness(n, s, d, 3) && uint64_witness(n, s, d, 5) &&
-	    uint64_witness(n, s, d, 7) && uint64_witness(n, s, d, 11) && uint64_witness(n, s, d, 13) &&
-	    uint64_witness(n, s, d, 17) && uint64_witness(n, s, d, 19) && uint64_witness(n, s, d, 23) &&
-	    uint64_witness(n, s, d, 29) && uint64_witness(n, s, d, 31) && uint64_witness(n, s, d, 37);
-}
-
 static void uint64_exponentiate(uint64_t & s, uint64_t & t, uint64_t & u, uint64_t e, uint64_t n, uint64_t a)
 {
 	int bit = 63 - __builtin_clzll(e);
 	uint64_t s2, t2, u2, st, tu, us, uu, ss, tt;
-	uint128_t tmp;
 
 	while (bit--) {
 		// Double
-		tmp = s;
-		tmp *= s;
-		tmp %= n;
-		tmp %= a;
-		tmp %= n;
-		s2 = tmp;
-		tmp = t;
-		tmp *= t;
-		tmp %= n;
-		t2 = tmp;
-		tmp = u;
-		tmp *= u;
-		tmp %= n;
-		u2 = tmp;
-		tmp = s;
-		tmp *= t;
-		tmp %= n;
-		tmp %= a;
-		tmp %= n;
-		st = tmp;
-		tmp = t;
-		tmp *= u;
-		tmp %= n;
-		tu = tmp;
-		tmp = u;
-		tmp *= s;
-		tmp %= n;
-		us = tmp;
+		s2 = mulmod(s, s, n);
+		s2 = mulmod(s2, a, n);
+		t2 = mulmod(t, t, n);
+		u2 = mulmod(u, u, n);
+		st = mulmod(s, t, n);
+		st = mulmod(st, a, n);
+		tu = mulmod(t, u, n);
+		us = mulmod(u, s, n);
 		st <<= 1;
 		tu <<= 1;
 		us <<= 1;
 		if ((e >> bit) & 1) {
 			// add
-			tmp = us + t2 + s2;
-			tmp *= a;
-			tmp %= n;
-			uu = tmp;
+			uu = mulmod(us + t2 + s2, a, n);
 			ss = s2 + st + tu;
 			tt = u2 + st + uu;
 		} else {
@@ -514,7 +424,12 @@ static bool uint64_cubic_primality(uint64_t n)
 	if (n >> 61) {
 		// the cubic test might overflow for numbers > 61 bits along the additions
 		// Better use another slower deterministic test for numbers <= 64 bits
-		return uint64_isprime(n);
+		// More precise constraint is n < 2^64/6
+		mpz_t v;
+		mpz_init_set_ui(v, n);
+		bool r = mpz_cubic_primality(v);
+		mpz_clear(v);
+		return r;
 	}
 
 	if ((n & 1) == 0) {
@@ -567,9 +482,9 @@ static bool uint64_cubic_primality(uint64_t n)
 		bt = 1;
 		bu = 0;
 		uint64_exponentiate(bs, bt, bu, n - 1, n, a);
-		if (bs == 1 && bt == 0 && bu == 0) {
+		if (bs == 0 && bt == 0 && bu == 1) {
 			// printf("more loops k %lu a %lu n %lu\n", k, a, n);
-			continue;	// try another a
+			continue;	// B == 1 try another a
 		}
 		break;
 	}
@@ -586,7 +501,7 @@ static bool uint64_cubic_primality(uint64_t n)
 bool mpz_cubic_primality(mpz_t n)
 {
 	if (mpz_cmp_ui(n, 1ull << 61) < 0) {
-		// the cubic test iwill run in 64 bits calculations
+		// the cubic test will run in 64 bits calculations
 		return uint64_cubic_primality(mpz_get_ui(n));
 	}
 
@@ -618,7 +533,7 @@ bool mpz_cubic_primality(mpz_t n)
 	while (1) {
 		k += 1;
 		a = 7 + k * (k - 1);
-		if (!uint64_isprime(a)) {
+		if (!uint64_cubic_primality(a)) {
 			continue;	// try another a
 		}
 		if (uint64_powm(mpz_mod_ui(ignore, n, a), (a - 1) / 3, a) == 1) {
@@ -646,9 +561,9 @@ bool mpz_cubic_primality(mpz_t n)
 		mpz_set_ui(bu, 0);
 		mpz_sub_ui(e, n, 1);
 		mpz_exponentiate(bs, bt, bu, e, n, a);
-		if (mpz_cmp_ui(bs, 1) == 0 && mpz_sgn(bt) == 0 && mpz_sgn(bu) == 0) {
+		if (mpz_sgn(bs) == 0 && mpz_sgn(bt) == 0 && mpz_cmp_ui(bu, 1) == 0) {
 			// gmp_printf("more loops k %lu a %lu n %Zu\n", k, a, n);
-			continue;	// try another a
+			continue;	// B == 1 try another a
 		}
 		break;
 	}
@@ -742,8 +657,8 @@ void cubic_primality_self_test(void)
 	mpz_clears(ma, mb, 0);
 
 	printf("Small primes\n");
-	assert(uint64_isprime(16777259ull) == true);
-	assert(uint64_isprime(16777265ull) == false);
-	assert(uint64_isprime(281474976710677ull) == true);
-	assert(uint64_isprime(281474976710683ull) == false);
+	assert(uint64_cubic_primality(16777259ull) == true);
+	assert(uint64_cubic_primality(16777265ull) == false);
+	assert(uint64_cubic_primality(281474976710677ull) == true);
+	assert(uint64_cubic_primality(281474976710683ull) == false);
 }
