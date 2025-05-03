@@ -95,12 +95,6 @@ template <class T, class TT> static T add_mod(const T &u, const T &v, const T &q
     return (T)r;
 }
 
-#if 0
-		template <> uint64_t add_mod < uint64_t, uint128_t > (const uint64_t & u, const uint64_t & v, const uint64_t & q) {
- uint64_t rv, a; asm("xor %0, %0\nadd %3,%1\ncmovc 1,%0\ndiv %4": "=&d"(rv), "=a"(a):"1"(u), "r"(v), "r"(q));
-		return rv;}
-#endif
-
 template <class T, class TT> static T sub_mod(const T &u, const T &v, const T &q)
 {
     if (u >= v)
@@ -381,27 +375,6 @@ template <class T, class TT> static bool isprime(const T &n)
            witness<T, TT>(n, s, d, 7) && witness<T, TT>(n, s, d, 11) && witness<T, TT>(n, s, d, 13) &&
            witness<T, TT>(n, s, d, 17) && witness<T, TT>(n, s, d, 19) && witness<T, TT>(n, s, d, 23) &&
            witness<T, TT>(n, s, d, 29) && witness<T, TT>(n, s, d, 31) && witness<T, TT>(n, s, d, 37);
-#if 0
-		if (n < 341531)
-		return witness < T, TT > (n, s, d, 9345883071009581737ull); if (n < 1050535501ull)
-		return witness < T, TT > (n, s, d, 336781006125ull) && witness < T, TT > (n, s, d, 9639812373923155ull);
-		if (n < 350269456337ull)
-		return witness < T, TT > (n, s, d, 4230279247111683200ull) && witness < T, TT > (n, s, d, 14694767155120705706ull)
-		&& witness < T, TT > (n, s, d, 16641139526367750375ull); if (n < 55245642489451ull)
-		return witness < T, TT > (n, s, d, 2) && witness < T, TT > (n, s, d, 141889084524735ull)
-		&& witness < T, TT > (n, s, d, 1199124725622454117ull) && witness < T, TT > (n, s, d, 11096072698276303650ull);
-		if (n < 7999252175582851ull)
-		return witness < T, TT > (n, s, d, 2) && witness < T, TT > (n, s, d, 4130806001517ull)
-		&& witness < T, TT > (n, s, d, 149795463772692060ull) && witness < T, TT > (n, s, d, 186635894390467037ull)
-		&& witness < T, TT > (n, s, d, 3967304179347715805ull); if (n < 585226005592931977ull)
-		return witness < T, TT > (n, s, d, 2) && witness < T, TT > (n, s, d, 123635709730000ull)
-		&& witness < T, TT > (n, s, d, 9233062284813009ull) && witness < T, TT > (n, s, d, 43835965440333360ull)
-		&& witness < T, TT > (n, s, d, 761179012939631437ull) && witness < T, TT > (n, s, d, 1263739024124850375ull);
-		return witness < T, TT > (n, s, d, 2) && witness < T, TT > (n, s, d, 325)
-		&& witness < T, TT > (n, s, d, 9375) && witness < T, TT > (n, s, d, 28178)
-		&& witness < T, TT > (n, s, d, 450885) && witness < T, TT > (n, s, d, 9780504)
-		&& witness < T, TT > (n, s, d, 1795265022);
-#endif
 }
 
 template <class T, class TT> void exponentiate(T &s, T &t, T &u, const T e, const T n, const T a)

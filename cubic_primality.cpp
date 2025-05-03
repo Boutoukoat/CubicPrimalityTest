@@ -360,26 +360,28 @@ static sieve_t mpz_composite_sieve(mpz_t n)
 static void uint64_exponentiate(uint64_t &s, uint64_t &t, uint64_t &u, uint64_t e, uint64_t n, uint64_t a)
 {
     int bit = 63 - __builtin_clzll(e);
-    uint64_t s2, t2, u2, st, tu, us, uu, ss, tt;
+    uint128_t s2, t2, u2, st, tu, us, uu, ss, tt;
+    uint64_t tmp;
 
     while (bit--)
     {
         // Double
-        s2 = mulmod(s, s, n);
-        s2 = mulmod(s2, a, n);
-        t2 = mulmod(t, t, n);
-        u2 = mulmod(u, u, n);
-        st = mulmod(s, t, n);
-        st = mulmod(st, a, n);
-        tu = mulmod(t, u, n);
-        us = mulmod(u, s, n);
+        tmp = mulmod(s, s, n);
+        s2 = (uint128_t)tmp * a;
+        t2 = (uint128_t)t * t;
+        u2 = (uint128_t)u * u;
+        tmp = mulmod(s, t, n);
+        st = (uint128_t)tmp * a;
+        tu = (uint128_t)t * u;
+        us = (uint128_t)u * s;
         st <<= 1;
         tu <<= 1;
         us <<= 1;
         if ((e >> bit) & 1)
         {
             // add
-            uu = mulmod(us + t2 + s2, a, n);
+            tmp = (us + t2 + s2) % n;
+	    uu = (uint128_t)tmp * a;
             ss = s2 + st + tu;
             tt = u2 + st + uu;
         }
@@ -517,7 +519,8 @@ static bool uint64_cubic_primality(uint64_t n)
         uint64_exponentiate(bs, bt, bu, n - 1, n, a);
         if (bs == 0 && bt == 0 && bu == 1)
         {
-            printf("more loops k %lu a %lu n %lu\n", k, a, n);
+		// todo : composite for sure
+            // printf("more loops k %lu a %lu n %lu\n", k, a, n);
             continue; // B == 1 try another a
         }
         break;
@@ -607,7 +610,8 @@ bool mpz_cubic_primality(mpz_t n)
         mpz_exponentiate(bs, bt, bu, e, n, a);
         if (mpz_sgn(bs) == 0 && mpz_sgn(bt) == 0 && mpz_cmp_ui(bu, 1) == 0)
         {
-            gmp_printf("more loops k %lu a %lu n %Zu\n", k, a, n);
+		// todo : composite for sure
+            // gmp_printf("more loops k %lu a %lu n %Zu\n", k, a, n);
             continue; // B == 1 try another a
         }
         break;
