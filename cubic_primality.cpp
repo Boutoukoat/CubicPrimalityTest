@@ -381,7 +381,7 @@ static void uint64_exponentiate(uint64_t &s, uint64_t &t, uint64_t &u, uint64_t 
         {
             // add
             tmp = (us + t2 + s2) % n;
-	    uu = (uint128_t)tmp * a;
+            uu = (uint128_t)tmp * a;
             ss = s2 + st + tu;
             tt = u2 + st + uu;
         }
@@ -443,7 +443,7 @@ static void mpz_exponentiate(mpz_t s, mpz_t t, mpz_t u, mpz_t e, mpz_t n, uint64
     mpz_clears(tmp, s2, t2, u2, st, tu, us, uu, ss, tt, 0);
 }
 
-static bool uint64_cubic_primality(uint64_t n)
+static bool uint64_cubic_primality(uint64_t n, bool verbose = false)
 {
     if (n >> 61)
     {
@@ -452,7 +452,7 @@ static bool uint64_cubic_primality(uint64_t n)
         // More precise constraint is n < 2^64/6
         mpz_t v;
         mpz_init_set_ui(v, n);
-        bool r = mpz_cubic_primality(v);
+        bool r = mpz_cubic_primality(v, verbose);
         mpz_clear(v);
         return r;
     }
@@ -466,8 +466,12 @@ static bool uint64_cubic_primality(uint64_t n)
     switch (sv)
     {
     case COMPOSITE_FOR_SURE:
+        if (verbose)
+            printf("Number has a small factor\n");
         return false; // composite
     case PRIME_FOR_SURE:
+        if (verbose)
+            printf("Small number has no small factor\n");
         return true; // prime
     case UNDECIDED:
     default:
@@ -476,6 +480,8 @@ static bool uint64_cubic_primality(uint64_t n)
 
     if (uint64_perfect_cube(n))
     {
+        if (verbose)
+            printf("Number is a perfect cube\n");
         return false; // composite
     }
 
@@ -495,6 +501,8 @@ static bool uint64_cubic_primality(uint64_t n)
         }
         if (a == n)
         {
+            if (verbose)
+                printf("Number is a small prime\n");
             return true; // small prime
         }
         if (k >= 5405)
@@ -511,6 +519,8 @@ static bool uint64_cubic_primality(uint64_t n)
         }
         if (g > 1)
         {
+            if (verbose)
+                printf("Number has a small factor\n");
             return false; //  composite
         }
         bs = 0;
@@ -519,8 +529,9 @@ static bool uint64_cubic_primality(uint64_t n)
         uint64_exponentiate(bs, bt, bu, n - 1, n, a);
         if (bs == 0 && bt == 0 && bu == 1)
         {
-		// todo : composite for sure
-            // printf("more loops k %lu a %lu n %lu\n", k, a, n);
+            // todo : composite for sure
+            if (verbose)
+                printf("Composite for sure ? more loops k %lu a %lu n %lu\n", k, a, n);
             continue; // B == 1 try another a
         }
         break;
@@ -531,20 +542,28 @@ static bool uint64_cubic_primality(uint64_t n)
     bt = (bt + bt2) % n;
     bu = (bu + bu2 + 1) % n;
     if (bs != n - 1 || bt != 1 || bu != a)
+    {
+        if (verbose)
+            printf("Number is composite\n");
         return false; // composite
-    return true;      // might be prime
+    }
+    return true; // might be prime
 }
 
-bool mpz_cubic_primality(mpz_t n)
+bool mpz_cubic_primality(mpz_t n, bool verbose)
 {
+    if (verbose)
+        gmp_printf("Testing 0x%Zx\n", n);
     if (mpz_cmp_ui(n, 1ull << 61) < 0)
     {
         // the cubic test will run in 64 bits calculations
-        return uint64_cubic_primality(mpz_get_ui(n));
+        return uint64_cubic_primality(mpz_get_ui(n), verbose);
     }
 
     if (mpz_tstbit(n, 0) == 0)
     {
+        if (verbose)
+            printf("Number is even\n");
         return (mpz_cmp_ui(n, 2) == 0); // even
     }
     // detects small primes, small composites
@@ -553,8 +572,12 @@ bool mpz_cubic_primality(mpz_t n)
     switch (sv)
     {
     case COMPOSITE_FOR_SURE:
+        if (verbose)
+            printf("Number has a small factor\n");
         return false; // composite
     case PRIME_FOR_SURE:
+        if (verbose)
+            printf("Small number has no small factor\n");
         return true; // prime
     case UNDECIDED:
     default:
@@ -563,6 +586,8 @@ bool mpz_cubic_primality(mpz_t n)
 
     if (mpz_perfect_cube(n))
     {
+        if (verbose)
+            printf("Number is a perfect cube\n");
         return false; // composite
     }
 
@@ -585,6 +610,8 @@ bool mpz_cubic_primality(mpz_t n)
         }
         if (mpz_cmp_ui(n, a) == 0)
         {
+            if (verbose)
+                printf("Number is a small prime\n");
             res = true; // small prime
             goto done2;
         }
@@ -600,6 +627,8 @@ bool mpz_cubic_primality(mpz_t n)
         uint64_t g = uint64_gcd(u, v);
         if (g > 1)
         {
+            if (verbose)
+                printf("Number has a small factor\n");
             res = false; // composite
             goto done2;
         }
@@ -610,8 +639,9 @@ bool mpz_cubic_primality(mpz_t n)
         mpz_exponentiate(bs, bt, bu, e, n, a);
         if (mpz_sgn(bs) == 0 && mpz_sgn(bt) == 0 && mpz_cmp_ui(bu, 1) == 0)
         {
-		// todo : composite for sure
-            // gmp_printf("more loops k %lu a %lu n %Zu\n", k, a, n);
+            // todo : composite for sure
+            if (verbose)
+                gmp_printf("Composite ? more loops k %lu a %lu n %Zu\n", k, a, n);
             continue; // B == 1 try another a
         }
         break;
@@ -637,6 +667,8 @@ bool mpz_cubic_primality(mpz_t n)
             mpz_mod(bu, bu, n);
             if (mpz_cmp_ui(bu, a) == 0)
             {
+                if (verbose)
+                    printf("Number passed all test and is likely not a composite one\n");
                 res = true;
                 goto done1;
             }
