@@ -11,7 +11,7 @@
 #include "bison.gmp_expr.h"
 #include "cubic_primality.h"
 
-static void cubic_primality_file(char *name)
+static void cubic_primality_file(char *name, bool verbose)
 {
     long prime_count = 0;
     long composite_count = 0;
@@ -41,8 +41,10 @@ static void cubic_primality_file(char *name)
             }
             if (*pt && *pt != '#') // discard empty lines or comments
             {
+		    if (verbose) { printf("%s ...", pt); fflush(stdout); }
                 mpz_expression_parse(v, pt);
                 bool is_prime = mpz_cubic_primality(v);
+		if (verbose) { printf(" %s\n", is_prime ? "might be prime": "composite for sure"); }
                 prime_count += (is_prime == true);
                 composite_count += (is_prime == false);
             }
@@ -82,7 +84,7 @@ int main(int argc, char **argv)
         }
         else if (!strcmp(argv[i], "-f"))
         {
-            cubic_primality_file(argv[++i]);
+            cubic_primality_file(argv[++i], verbose);
             verbose = true;
         }
         else

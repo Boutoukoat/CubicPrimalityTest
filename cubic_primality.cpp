@@ -491,6 +491,8 @@ static bool uint64_cubic_primality(uint64_t n, bool verbose = false)
     {
         return n == 2; // even
     }
+    if (n == 1) return false;  // one is not prime 
+
     // sieve composites with small factors
     sieve_t sv = uint64_composite_sieve(n);
     switch (sv)
