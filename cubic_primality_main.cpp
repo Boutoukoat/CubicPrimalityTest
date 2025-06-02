@@ -111,7 +111,7 @@ int main(int argc, char **argv)
             diff += ts2.tv_nsec;
             diff -= ts1.tv_nsec;
             diff /= 1e6;
-            printf("%s %s, time=%12.3f msecs.\n", argv[i], (is_prime ? "might be prime" : "is composite for sure"),
+            printf("%s %s, time = %12.3f msecs.\n", argv[i], (is_prime ? "might be prime" : "is composite for sure"),
                    diff);
             fflush(stdout);
             mpz_clear(n);

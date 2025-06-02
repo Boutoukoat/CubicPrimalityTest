@@ -19,6 +19,8 @@ struct mod_precompute_t
     uint64_t n;
     uint64_t n32;
     uint64_t n2;
+    bool power2me;
+    uint64_t e;
 };
 
 static struct mod_precompute_t *mpz_mod_precompute(mpz_t n)
@@ -27,9 +29,20 @@ static struct mod_precompute_t *mpz_mod_precompute(mpz_t n)
     mod_precompute_t *p = (mod_precompute_t *)calloc(sizeof(mod_precompute_t), 1);
     mpz_inits(tmp, p->a, p->b, p->m, 0);
     p->n = mpz_sizeinbase(n, 2);
+    mpz_set(p->m, n);
+
+    // check a power of 2 minus e
+    mpz_set_ui(tmp, 1);
+    mpz_mul_2exp(tmp, tmp, p->n);
+    mpz_sub(tmp, tmp, n);
+    p->e = mpz_get_ui(tmp);
+    p->power2me = (p->n >= 128 && mpz_sgn(tmp) >= 0 && mpz_size(tmp) <= 1);
+
+    // precompute
+    // b = 2^(3n/2) / n
+    // a = 2^(3n/2) % n
     p->n2 = p->n >> 1;
     p->n32 = p->n + p->n2;
-    mpz_set(p->m, n);
     mpz_set_ui(tmp, 1);
     mpz_mul_2exp(tmp, tmp, p->n32);
     mpz_divmod(p->b, p->a, tmp, n);
@@ -51,27 +64,32 @@ static void mpz_mod_fast_reduce(mpz_t r, mpz_t x, struct mod_precompute_t *p)
     mpz_t tmp, x_lo, x_hi;
     mpz_inits(tmp, x_lo, x_hi, 0);
 
-    // reduce the number to approx 2*n bits
     mpz_set(r, x);
+
+    // special reduction for modulus = 2^n-e
+    if (p->power2me)
+    {
+        mpz_div_2exp(x_hi, r, p->n);
+        while (mpz_sgn(x_hi) != 0)
+        {
+            mpz_mod_2exp(x_lo, r, p->n);
+            mpz_mul_ui(x_hi, x_hi, p->e);
+            mpz_add(r, x_lo, x_hi);
+            mpz_div_2exp(x_hi, r, p->n);
+        }
+        return;
+    }
+
+    // reduce the number to approx 2*n bits
     mpz_div_2exp(x_hi, r, p->n32 + p->n2);
     while (mpz_sgn(x_hi) != 0)
     {
-        // x_hi * a << n/2 + x_lo
+        // (x_hi * a) << n/2 + x_lo
         mpz_mod_2exp(x_lo, r, p->n32 + p->n2);
         mpz_mul(x_hi, x_hi, p->a);
         mpz_mul_2exp(x_hi, x_hi, p->n2);
         mpz_add(r, x_hi, x_lo);
         mpz_div_2exp(x_hi, r, p->n32 + p->n2);
-
-#if 0
-	// paranoid double-check
-        mpz_t t1, t2;
-        mpz_inits(t1, t2, 0);
-        mpz_mod(t1, x, p->m);
-        mpz_mod(t2, r, p->m);
-        assert(mpz_cmp(t1, t2) == 0);
-        mpz_clears(t1, t2, 0);
-#endif
     }
 
     // reduce the number to approx 3*n/2 bits
@@ -82,44 +100,16 @@ static void mpz_mod_fast_reduce(mpz_t r, mpz_t x, struct mod_precompute_t *p)
         mpz_mod_2exp(x_lo, r, p->n32);
         mpz_mul(x_hi, x_hi, p->a);
         mpz_add(r, x_hi, x_lo);
-
-#if 0
-	// paranoid double-check
-        mpz_t t1, t2;
-        mpz_inits(t1, t2, 0);
-        mpz_mod(t1, x, p->m);
-        mpz_mod(t2, r, p->m);
-        assert(mpz_cmp(t1, t2) == 0);
-        mpz_clears(t1, t2, 0);
-#endif
     }
 
     // reduce the number to approx n bits
     mpz_div_2exp(x_hi, r, p->n);
-    // gmp_printf("barrett estimate hi %Zx\n", x_hi);
-    // gmp_printf("barrett b %Zx\n", p->b);
     mpz_mul(x_hi, x_hi, p->b);
-    // gmp_printf("barrett estimate hi*b %Zx\n", x_hi);
     mpz_div_2exp(x_hi, x_hi, p->n2);
-    // gmp_printf("barrett estimate hi*b >> %d %Zx\n", p->n2, x_hi);
     mpz_mul(x_hi, x_hi, p->m);
-    // gmp_printf("barrett %Zx (%d bits) - hi*b*mod %Zx (%d bits)\n", r, mpz_sizeinbase(r, 2), x_hi,
-    // mpz_sizeinbase(x_hi, 2));
     mpz_sub(r, r, x_hi);
-    // gmp_printf("r %Zx (%d) mod %Zx (%d)\n", r, mpz_sizeinbase(r, 2), p->m, mpz_sizeinbase(p->m, 2));
 
-#if 0
-    {
-	// paranoid double-check
-        mpz_t t1, t2;
-        mpz_inits(t1, t2, 0);
-        mpz_mod(t1, x, p->m);
-        mpz_mod(t2, r, p->m);
-        assert(mpz_cmp(t1, t2) == 0);
-        mpz_clears(t1, t2, 0);
-    }
-#endif
-
+    // reduce the number to exactly n bits
     mpz_div_2exp(tmp, r, p->n);
     while (mpz_sgn(tmp) != 0)
     {
@@ -127,24 +117,12 @@ static void mpz_mod_fast_reduce(mpz_t r, mpz_t x, struct mod_precompute_t *p)
         mpz_div_2exp(tmp, r, p->n);
     }
 
-#if 0
-    {
-	// paranoid double-check
-        mpz_t t1, t2;
-        mpz_inits(t1, t2, 0);
-        mpz_mod(t1, x, p->m);
-        mpz_mod(t2, r, p->m);
-        assert(mpz_cmp(t1, t2) == 0);
-        mpz_clears(t1, t2, 0);
-    }
-#endif
-
     mpz_clears(tmp, x_lo, x_hi, 0);
 }
 
 static void mpz_mod_slow_reduce(mpz_t r, mpz_t x, mpz_t m)
 {
-    // subtract until underflow
+    // subtract the modulus until underflow
     mpz_set(r, x);
     while (mpz_cmp(r, m) >= 0)
     {
@@ -445,8 +423,8 @@ static sieve_t uint64_composite_sieve(uint64_t a)
     if ((uint64_t)(a * 0x6fe4dfc9bf937f27ull) <= 0x01b2036406c80d90ull)
         return COMPOSITE_FOR_SURE; // divisible by 151
 
-    // no factor less than 151
-    if (a <= 151 * 151)
+    // no factor less than 157
+    if (a <= 157 * 157)
         return PRIME_FOR_SURE; // prime
     return UNDECIDED;
 }
