@@ -20,6 +20,7 @@ struct mod_precompute_t
     uint64_t n32;
     uint64_t n2;
     bool power2me;
+    bool power2pe;
     uint64_t e;
 };
 
@@ -35,8 +36,20 @@ static struct mod_precompute_t *mpz_mod_precompute(mpz_t n)
     mpz_set_ui(tmp, 1);
     mpz_mul_2exp(tmp, tmp, p->n);
     mpz_sub(tmp, tmp, n);
-    p->e = mpz_get_ui(tmp);
-    p->power2me = (p->n >= 128 && mpz_sgn(tmp) >= 0 && mpz_size(tmp) <= 1);
+    p->power2me = (p->n > 128 && mpz_sgn(tmp) >= 0 && mpz_size(tmp) <= 1);
+    if (p->power2me)
+    {
+    	p->e = mpz_get_ui(tmp);
+    }
+    else
+    {
+        // check a power of 2 plus e
+        mpz_set_ui(tmp, 1);
+        mpz_mul_2exp(tmp, tmp, p->n - 1);
+        mpz_sub(tmp, n, tmp);
+        p->power2pe = (p->n > 128 && mpz_sgn(tmp) >=0 && mpz_size(tmp) <= 1);
+    	p->e = mpz_get_ui(tmp);
+    }
 
     // precompute
     // b = 2^(3n/2) / n
@@ -66,9 +79,10 @@ static void mpz_mod_fast_reduce(mpz_t r, mpz_t x, struct mod_precompute_t *p)
 
     mpz_set(r, x);
 
-    // special reduction for modulus = 2^n-e
+    // special reduction for modulus = 2^n +/- e
     if (p->power2me)
     {
+	    // while (hi != 0) lo += hi * e
         mpz_div_2exp(x_hi, r, p->n);
         while (mpz_sgn(x_hi) != 0)
         {
@@ -77,9 +91,34 @@ static void mpz_mod_fast_reduce(mpz_t r, mpz_t x, struct mod_precompute_t *p)
             mpz_add(r, x_lo, x_hi);
             mpz_div_2exp(x_hi, r, p->n);
         }
-        return;
     }
-
+    else if (p->power2pe)
+    {
+	    // while (hi != 0) lo -= hi * e
+        mpz_div_2exp(x_hi, r, p->n - 1);
+        while (mpz_cmp_ui(x_hi, 1) > 0)
+        {
+            mpz_mod_2exp(x_lo, r, p->n - 1);
+            mpz_mul_ui(x_hi, x_hi, p->e);
+            if (mpz_cmp(x_lo, x_hi) >= 0)
+	    {
+		//    lo - hi * e
+            	mpz_sub(r, x_lo, x_hi);
+	    }
+	    else
+	    {
+		//    (lo + k * m) - hi * e
+        	mpz_div_2exp(tmp, x_hi, p->n - 1);
+		mpz_add_ui(tmp, tmp, 1);
+		mpz_mul(tmp, tmp, p->m);
+            	mpz_add(r, x_lo, tmp);
+		mpz_sub(r, r, x_hi);
+	    }
+            mpz_div_2exp(x_hi, r, p->n - 1);
+        }
+    }
+    else
+    {
     // reduce the number to approx 2*n bits
     mpz_div_2exp(x_hi, r, p->n32 + p->n2);
     while (mpz_sgn(x_hi) != 0)
@@ -115,6 +154,8 @@ static void mpz_mod_fast_reduce(mpz_t r, mpz_t x, struct mod_precompute_t *p)
     {
         mpz_sub(r, r, p->m);
         mpz_div_2exp(tmp, r, p->n);
+    }
+
     }
 
     mpz_clears(tmp, x_lo, x_hi, 0);
@@ -977,12 +1018,8 @@ void cubic_primality_self_test(void)
     assert(uint64_cubic_primality(281474976710683ull) == false);
 
     uint32_t smallq[] = {
-        1,   1,   1,   3,   1,   5,  3,   3,  1,   9,  7,   5,   3,  17,  27,  3,  1,  29,  3,   21,  7,  17,  15,  9,
-        43,  35,  15,  29,  3,   11, 3,   11, 15,  17, 25,  53,  31, 9,   7,   23, 15, 27,  15,  29,  7,  59,  15,  5,
-        21,  69,  55,  21,  21,  5,  159, 3,  81,  9,  69,  131, 33, 15,  135, 29, 13, 131, 9,   3,   33, 29,  25,  11,
-        15,  29,  37,  33,  15,  11, 7,   23, 13,  17, 9,   75,  3,  171, 27,  39, 7,  29,  133, 59,  25, 105, 129, 9,
-        61,  105, 7,   255, 277, 81, 267, 81, 111, 39, 99,  39,  33, 147, 27,  51, 25, 281, 43,  71,  33, 29,  25,  9,
-        451, 41,  277, 165, 67,  27, 7,   29, 51,  17, 169, 39,  67, 27,  27,  33, 85, 155, 87,  155, 37, 0};
+1 ,1 ,1 ,3 ,1 ,5 ,3 ,3 ,1 ,9 ,7 ,5 ,3 ,17 ,27 ,3 ,1 ,29 ,3 ,21 ,7 ,17 ,15 ,9 ,43 ,35 ,15 ,29 ,3 ,11 ,3 ,11 ,15 ,17 ,25 ,53 ,31 ,9 ,7 ,23 ,15 ,27 ,15 ,29 ,7 ,59 ,15 ,5 ,21 ,69 ,55 ,21 ,21 ,5 ,159 ,3 ,81 ,9 ,69 ,131 ,33 ,15 ,135 ,29 ,13 ,131 ,9 ,3 ,33 ,29 ,25 ,11 ,15 ,29 ,37 ,33 ,15 ,11 ,7 ,23 ,13 ,17 ,9 ,75 ,3 ,171 ,27 ,39 ,7 ,29 ,133 ,59 ,25 ,105 ,129 ,9 ,61 ,105 ,7 ,255 ,277 ,81 ,267 ,81 ,111 ,39 ,99 ,39 ,33 ,147 ,27 ,51 ,25 ,281 ,43 ,71 ,33 ,29 ,25 ,9 ,451 ,41 ,277 ,165 ,67 ,27 ,7 ,29 ,51 ,17 ,169 ,39 ,67 ,27 ,27 ,33 ,85 ,155 ,87 ,155 ,37 ,5 ,217 ,5 ,175 ,27 ,85 ,51 ,91 ,69 ,147 ,45 ,253 ,95 ,27 ,15 ,45 ,69 ,97 ,299 ,7 ,107 ,19 ,21 ,117 ,141 ,85 ,83 ,87 ,147 ,49 ,129 ,105 ,77 ,7 ,9 ,427 ,75 ,87 ,309 ,15 ,165 ,49 ,215 ,27 ,159 ,205 ,303 ,57 ,35 ,129 ,5 ,133 ,65 ,27 ,35 ,21 ,107 ,15 ,101 ,235 ,351 ,67 ,15 ,7 ,581 ,33 ,203 ,375 ,47 ,33 ,71 ,57 ,75 ,7 ,251 ,423 ,129 ,163 ,185 ,217 ,81 ,49 ,189 ,735 ,119 ,735 ,483 ,3 ,249 ,67 ,105 ,357 ,431 ,43 ,81 ,25 ,249 ,67 ,29 ,115 ,261 ,69 ,59 ,133 ,315 ,337 ,63 ,81 ,119 ,25 ,65 ,421 ,39 ,79 ,95 ,297 ,155 ,73 ,435 ,223 , 0};
+
     printf("Medium primes (mpz)\n");
     for (int j = 0; smallq[j]; j++)
     {
