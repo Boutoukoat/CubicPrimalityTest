@@ -39,7 +39,7 @@ static struct mod_precompute_t *mpz_mod_precompute(mpz_t n)
     p->power2me = (p->n > 128 && mpz_sgn(tmp) >= 0 && mpz_size(tmp) <= 1);
     if (p->power2me)
     {
-    	p->e = mpz_get_ui(tmp);
+        p->e = mpz_get_ui(tmp);
     }
     else
     {
@@ -47,8 +47,8 @@ static struct mod_precompute_t *mpz_mod_precompute(mpz_t n)
         mpz_set_ui(tmp, 1);
         mpz_mul_2exp(tmp, tmp, p->n - 1);
         mpz_sub(tmp, n, tmp);
-        p->power2pe = (p->n > 128 && mpz_sgn(tmp) >=0 && mpz_size(tmp) <= 1);
-    	p->e = mpz_get_ui(tmp);
+        p->power2pe = (p->n > 128 && mpz_sgn(tmp) >= 0 && mpz_size(tmp) <= 1);
+        p->e = mpz_get_ui(tmp);
     }
 
     // precompute
@@ -82,7 +82,7 @@ static void mpz_mod_fast_reduce(mpz_t r, mpz_t x, struct mod_precompute_t *p)
     // special reduction for modulus = 2^n +/- e
     if (p->power2me)
     {
-	    // while (hi != 0) lo += hi * e
+        // while (hi != 0) lo += hi * e
         mpz_div_2exp(x_hi, r, p->n);
         while (mpz_sgn(x_hi) != 0)
         {
@@ -94,68 +94,67 @@ static void mpz_mod_fast_reduce(mpz_t r, mpz_t x, struct mod_precompute_t *p)
     }
     else if (p->power2pe)
     {
-	    // while (hi != 0) lo -= hi * e
+        // while (hi != 0) lo -= hi * e
         mpz_div_2exp(x_hi, r, p->n - 1);
         while (mpz_cmp_ui(x_hi, 1) > 0)
         {
             mpz_mod_2exp(x_lo, r, p->n - 1);
             mpz_mul_ui(x_hi, x_hi, p->e);
             if (mpz_cmp(x_lo, x_hi) >= 0)
-	    {
-		//    lo - hi * e
-            	mpz_sub(r, x_lo, x_hi);
-	    }
-	    else
-	    {
-		//    (lo + k * m) - hi * e
-        	mpz_div_2exp(tmp, x_hi, p->n - 1);
-		mpz_add_ui(tmp, tmp, 1);
-		mpz_mul(tmp, tmp, p->m);
-            	mpz_add(r, x_lo, tmp);
-		mpz_sub(r, r, x_hi);
-	    }
+            {
+                //    lo - hi * e
+                mpz_sub(r, x_lo, x_hi);
+            }
+            else
+            {
+                //    (lo + k * m) - hi * e
+                mpz_div_2exp(tmp, x_hi, p->n - 1);
+                mpz_add_ui(tmp, tmp, 1);
+                mpz_mul(tmp, tmp, p->m);
+                mpz_add(r, x_lo, tmp);
+                mpz_sub(r, r, x_hi);
+            }
             mpz_div_2exp(x_hi, r, p->n - 1);
         }
     }
     else
     {
-    // reduce the number to approx 2*n bits
-    mpz_div_2exp(x_hi, r, p->n32 + p->n2);
-    while (mpz_sgn(x_hi) != 0)
-    {
-        // (x_hi * a) << n/2 + x_lo
-        mpz_mod_2exp(x_lo, r, p->n32 + p->n2);
-        mpz_mul(x_hi, x_hi, p->a);
-        mpz_mul_2exp(x_hi, x_hi, p->n2);
-        mpz_add(r, x_hi, x_lo);
+        // reduce the number to approx 2*n bits
         mpz_div_2exp(x_hi, r, p->n32 + p->n2);
-    }
+        while (mpz_sgn(x_hi) != 0)
+        {
+            // (x_hi * a) << n/2 + x_lo
+            mpz_mod_2exp(x_lo, r, p->n32 + p->n2);
+            mpz_mul(x_hi, x_hi, p->a);
+            mpz_mul_2exp(x_hi, x_hi, p->n2);
+            mpz_add(r, x_hi, x_lo);
+            mpz_div_2exp(x_hi, r, p->n32 + p->n2);
+        }
 
-    // reduce the number to approx 3*n/2 bits
-    mpz_div_2exp(x_hi, r, p->n32);
-    if (mpz_sgn(x_hi) != 0)
-    {
-        // x_hi * a + x_lo
-        mpz_mod_2exp(x_lo, r, p->n32);
-        mpz_mul(x_hi, x_hi, p->a);
-        mpz_add(r, x_hi, x_lo);
-    }
+        // reduce the number to approx 3*n/2 bits
+        mpz_div_2exp(x_hi, r, p->n32);
+        if (mpz_sgn(x_hi) != 0)
+        {
+            // x_hi * a + x_lo
+            mpz_mod_2exp(x_lo, r, p->n32);
+            mpz_mul(x_hi, x_hi, p->a);
+            mpz_add(r, x_hi, x_lo);
+        }
 
-    // reduce the number to approx n bits
-    mpz_div_2exp(x_hi, r, p->n);
-    mpz_mul(x_hi, x_hi, p->b);
-    mpz_div_2exp(x_hi, x_hi, p->n2);
-    mpz_mul(x_hi, x_hi, p->m);
-    mpz_sub(r, r, x_hi);
+        // reduce the number to approx n bits
+        mpz_div_2exp(x_hi, r, p->n);
+        mpz_mul(x_hi, x_hi, p->b);
+        mpz_div_2exp(x_hi, x_hi, p->n2);
+        mpz_mul(x_hi, x_hi, p->m);
+        mpz_sub(r, r, x_hi);
 
-    // reduce the number to exactly n bits
-    mpz_div_2exp(tmp, r, p->n);
-    while (mpz_sgn(tmp) != 0)
-    {
-        mpz_sub(r, r, p->m);
+        // reduce the number to exactly n bits
         mpz_div_2exp(tmp, r, p->n);
-    }
-
+        while (mpz_sgn(tmp) != 0)
+        {
+            mpz_sub(r, r, p->m);
+            mpz_div_2exp(tmp, r, p->n);
+        }
     }
 
     mpz_clears(tmp, x_lo, x_hi, 0);
@@ -177,19 +176,48 @@ static void mpz_mod_add(mpz_t r, mpz_t a, mpz_t b, mpz_t m)
     mpz_mod_slow_reduce(r, r, m);
 }
 
+// x % (2^b -1)
+static uint64_t mpz_mod_mersenne(mpz_t x, uint64_t b)
+{
+    uint64_t mask = (1ull << b) - 1;
+    unsigned s = mpz_size(x);
+    const mp_limb_t *array = mpz_limbs_read(x);
+    unsigned c = 0;
+    uint128_t t, r = 0;
+    for (unsigned i = 0; i < b; i += 1)
+    {
+        t = 0;
+        for (unsigned j = i; j < s; j += b)
+        {
+            t += array[j];
+        }
+        t = (t & mask) + (t >> b);
+        t = t << c;
+        r += t;
+        r = (r & mask) + (r >> b);
+        c += 64;
+        while (c >= b)
+        {
+            c -= b;
+        }
+    }
+    r = (r & mask) + (r >> b);
+    return (uint64_t)r;
+}
+
 static inline uint64_t mulmod(uint64_t a, uint64_t b, uint64_t n)
 {
-#if 0
-	uint128_t tmp;
-	tmp = a;
-	tmp *= b;
-	tmp %= n;
-	return tmp;
-#else
+#ifdef __x86_64__
     uint64_t r;
     asm("mul %3" : "=d"(r), "=a"(a) : "1"(a), "r"(b));
     asm("div %4" : "=d"(r), "=a"(a) : "0"(r), "1"(a), "r"(n));
     return r;
+#else
+    uint128_t tmp;
+    tmp = a;
+    tmp *= b;
+    tmp %= n;
+    return tmp;
 #endif
 }
 
@@ -490,10 +518,7 @@ static sieve_t mpz_composite_sieve(mpz_t n)
 
         uint64_t a;
         // 2^60-1 is divisible by 3,5,7,11,13,31,41,61,151 ...
-        mpz_t ignore;
-        mpz_init(ignore);
-        a = mpz_mod_ui(ignore, n, (1ull << 60) - 1);
-        mpz_clear(ignore);
+        a = mpz_mod_mersenne(n, 60);
 
         if ((uint64_t)(a * 0xaaaaaaaaaaaaaaabull) <= 0x5555555555555555ull)
             return COMPOSITE_FOR_SURE; // divisible by 3
@@ -514,10 +539,21 @@ static sieve_t mpz_composite_sieve(mpz_t n)
         if ((uint64_t)(a * 0x6fe4dfc9bf937f27ull) <= 0x01b2036406c80d90ull)
             return COMPOSITE_FOR_SURE; // divisible by 151
 
+        // 2^56-1 is divisible by 3, 5, 17, 29, 43, 113, 127, .....
+        a = mpz_mod_mersenne(n, 56);
+        if ((uint64_t)(a * 0xf0f0f0f0f0f0f0f1ull) <= 0x0f0f0f0f0f0f0f0full)
+            return COMPOSITE_FOR_SURE; // divisible by 17
+        if ((uint64_t)(a * 0x34f72c234f72c235ull) <= 0x08d3dcb08d3dcb08ull)
+            return COMPOSITE_FOR_SURE; // divisible by 29
+        if ((uint64_t)(a * 0x82fa0be82fa0be83ull) <= 0x05f417d05f417d05ull)
+            return COMPOSITE_FOR_SURE; // divisible by 43
+        if ((uint64_t)(a * 0x90fdbc090fdbc091ull) <= 0x0243f6f0243f6f02ull)
+            return COMPOSITE_FOR_SURE; // divisible by 113
+        if ((uint64_t)(a * 0x7efdfbf7efdfbf7full) <= 0x0204081020408102ull)
+            return COMPOSITE_FOR_SURE; // divisible by 127
+
         // 2^36-1 is divisible by 3,5,7,19,37,73,109, ...
-        mpz_init(ignore);
-        a = mpz_mod_ui(ignore, n, (1ull << 36) - 1);
-        mpz_clear(ignore);
+        a = mpz_mod_mersenne(n, 36);
         if ((uint64_t)(a * 0x86bca1af286bca1bull) <= 0x0d79435e50d79435ull)
             return COMPOSITE_FOR_SURE; // divisible by 19
         if ((uint64_t)(a * 0x14c1bacf914c1badull) <= 0x06eb3e45306eb3e4ull)
@@ -527,19 +563,8 @@ static sieve_t mpz_composite_sieve(mpz_t n)
         if ((uint64_t)(a * 0xa6c0964fda6c0965ull) <= 0x02593f69b02593f6ull)
             return COMPOSITE_FOR_SURE; // divisible by 109
 
-        // 2^48-1 is divisible by 13, 17, 97 .....
-        mpz_init(ignore);
-        a = mpz_mod_ui(ignore, n, (1ull << 48) - 1);
-        mpz_clear(ignore);
-        if ((uint64_t)(a * 0xf0f0f0f0f0f0f0f1ull) <= 0x0f0f0f0f0f0f0f0full)
-            return COMPOSITE_FOR_SURE; // divisible by 17
-        if ((uint64_t)(a * 0xa3a0fd5c5f02a3a1ull) <= 0x02a3a0fd5c5f02a3ull)
-            return COMPOSITE_FOR_SURE; // divisible by 97
-
         // 2^44-1 is divisible by 3, 5, 23, 89, .....
-        mpz_init(ignore);
-        a = mpz_mod_ui(ignore, n, (1ull << 44) - 1);
-        mpz_clear(ignore);
+        a = mpz_mod_mersenne(n, 44);
         if ((uint64_t)(a * 0xd37a6f4de9bd37a7ull) <= 0x0b21642c8590b216ull)
             return COMPOSITE_FOR_SURE; // divisible by 23
         if ((uint64_t)(a * 0xf47e8fd1fa3f47e9ull) <= 0x02e05c0b81702e05ull)
@@ -951,6 +976,19 @@ void cubic_primality_self_test(void)
     mc = mpz_perfect_cube(mb);
     assert(mc == false);
 
+    printf("Fast reduction mod 2^b-1 ...\n");
+    mpz_set_ui(ma, 11);
+    for (unsigned b = 1; b < 10; b++)
+    {
+        mpz_mul(ma, ma, ma);
+    }
+    for (unsigned b = 1; b < 64; b++)
+    {
+        uint64_t mm = (1ull << b) - 1;
+        uint64_t r = mpz_mod_mersenne(ma, b);
+        assert(r % mm == mpz_mod_ui(mb, ma, mm));
+    }
+
     printf("Sieve ...\n");
     assert(uint64_composite_sieve(101) == PRIME_FOR_SURE);
     assert(uint64_composite_sieve(1661) == COMPOSITE_FOR_SURE);
@@ -1018,7 +1056,18 @@ void cubic_primality_self_test(void)
     assert(uint64_cubic_primality(281474976710683ull) == false);
 
     uint32_t smallq[] = {
-1 ,1 ,1 ,3 ,1 ,5 ,3 ,3 ,1 ,9 ,7 ,5 ,3 ,17 ,27 ,3 ,1 ,29 ,3 ,21 ,7 ,17 ,15 ,9 ,43 ,35 ,15 ,29 ,3 ,11 ,3 ,11 ,15 ,17 ,25 ,53 ,31 ,9 ,7 ,23 ,15 ,27 ,15 ,29 ,7 ,59 ,15 ,5 ,21 ,69 ,55 ,21 ,21 ,5 ,159 ,3 ,81 ,9 ,69 ,131 ,33 ,15 ,135 ,29 ,13 ,131 ,9 ,3 ,33 ,29 ,25 ,11 ,15 ,29 ,37 ,33 ,15 ,11 ,7 ,23 ,13 ,17 ,9 ,75 ,3 ,171 ,27 ,39 ,7 ,29 ,133 ,59 ,25 ,105 ,129 ,9 ,61 ,105 ,7 ,255 ,277 ,81 ,267 ,81 ,111 ,39 ,99 ,39 ,33 ,147 ,27 ,51 ,25 ,281 ,43 ,71 ,33 ,29 ,25 ,9 ,451 ,41 ,277 ,165 ,67 ,27 ,7 ,29 ,51 ,17 ,169 ,39 ,67 ,27 ,27 ,33 ,85 ,155 ,87 ,155 ,37 ,5 ,217 ,5 ,175 ,27 ,85 ,51 ,91 ,69 ,147 ,45 ,253 ,95 ,27 ,15 ,45 ,69 ,97 ,299 ,7 ,107 ,19 ,21 ,117 ,141 ,85 ,83 ,87 ,147 ,49 ,129 ,105 ,77 ,7 ,9 ,427 ,75 ,87 ,309 ,15 ,165 ,49 ,215 ,27 ,159 ,205 ,303 ,57 ,35 ,129 ,5 ,133 ,65 ,27 ,35 ,21 ,107 ,15 ,101 ,235 ,351 ,67 ,15 ,7 ,581 ,33 ,203 ,375 ,47 ,33 ,71 ,57 ,75 ,7 ,251 ,423 ,129 ,163 ,185 ,217 ,81 ,49 ,189 ,735 ,119 ,735 ,483 ,3 ,249 ,67 ,105 ,357 ,431 ,43 ,81 ,25 ,249 ,67 ,29 ,115 ,261 ,69 ,59 ,133 ,315 ,337 ,63 ,81 ,119 ,25 ,65 ,421 ,39 ,79 ,95 ,297 ,155 ,73 ,435 ,223 , 0};
+        1,   1,   1,   3,   1,   5,   3,   3,   1,  9,   7,   5,   3,   17,  27,  3,   1,   29,  3,   21,  7,   17,
+        15,  9,   43,  35,  15,  29,  3,   11,  3,  11,  15,  17,  25,  53,  31,  9,   7,   23,  15,  27,  15,  29,
+        7,   59,  15,  5,   21,  69,  55,  21,  21, 5,   159, 3,   81,  9,   69,  131, 33,  15,  135, 29,  13,  131,
+        9,   3,   33,  29,  25,  11,  15,  29,  37, 33,  15,  11,  7,   23,  13,  17,  9,   75,  3,   171, 27,  39,
+        7,   29,  133, 59,  25,  105, 129, 9,   61, 105, 7,   255, 277, 81,  267, 81,  111, 39,  99,  39,  33,  147,
+        27,  51,  25,  281, 43,  71,  33,  29,  25, 9,   451, 41,  277, 165, 67,  27,  7,   29,  51,  17,  169, 39,
+        67,  27,  27,  33,  85,  155, 87,  155, 37, 5,   217, 5,   175, 27,  85,  51,  91,  69,  147, 45,  253, 95,
+        27,  15,  45,  69,  97,  299, 7,   107, 19, 21,  117, 141, 85,  83,  87,  147, 49,  129, 105, 77,  7,   9,
+        427, 75,  87,  309, 15,  165, 49,  215, 27, 159, 205, 303, 57,  35,  129, 5,   133, 65,  27,  35,  21,  107,
+        15,  101, 235, 351, 67,  15,  7,   581, 33, 203, 375, 47,  33,  71,  57,  75,  7,   251, 423, 129, 163, 185,
+        217, 81,  49,  189, 735, 119, 735, 483, 3,  249, 67,  105, 357, 431, 43,  81,  25,  249, 67,  29,  115, 261,
+        69,  59,  133, 315, 337, 63,  81,  119, 25, 65,  421, 39,  79,  95,  297, 155, 73,  435, 223, 0};
 
     printf("Medium primes (mpz)\n");
     for (int j = 0; smallq[j]; j++)
