@@ -19,6 +19,9 @@ struct mod_precompute_t
     uint64_t n;
     uint64_t n32;
     uint64_t n2;
+    bool special_case;
+    bool montg;
+    bool proth;
     bool power2me;
     bool power2pe;
     uint64_t e;
@@ -28,6 +31,12 @@ static struct mod_precompute_t *mpz_mod_precompute(mpz_t n)
 {
     mpz_t tmp;
     mod_precompute_t *p = (mod_precompute_t *)calloc(sizeof(mod_precompute_t), 1);
+
+    p->special_case = false;
+    p->proth = false;
+    p->montg = false;
+    p->power2pe = false;
+    p->power2me = false;
     mpz_inits(tmp, p->a, p->b, p->m, 0);
     p->n = mpz_sizeinbase(n, 2);
     mpz_set(p->m, n);
@@ -40,8 +49,10 @@ static struct mod_precompute_t *mpz_mod_precompute(mpz_t n)
     if (p->power2me)
     {
         p->e = mpz_get_ui(tmp);
+        p->special_case = true;
     }
-    else
+
+    if (!p->special_case)
     {
         // check a power of 2 plus e
         mpz_set_ui(tmp, 1);
@@ -49,16 +60,41 @@ static struct mod_precompute_t *mpz_mod_precompute(mpz_t n)
         mpz_sub(tmp, n, tmp);
         p->power2pe = (p->n > 128 && mpz_sgn(tmp) >= 0 && mpz_size(tmp) <= 1);
         p->e = mpz_get_ui(tmp);
+        p->special_case = p->power2pe;
     }
 
-    // precompute
-    // b = 2^(3n/2) / n
-    // a = 2^(3n/2) % n
-    p->n2 = p->n >> 1;
-    p->n32 = p->n + p->n2;
-    mpz_set_ui(tmp, 1);
-    mpz_mul_2exp(tmp, tmp, p->n32);
-    mpz_divmod(p->b, p->a, tmp, n);
+    if (!p->special_case)
+    {
+        // check a proth number
+        p->n2 = (p->n + 1) / 2;
+        mpz_mod_2exp(tmp, n, p->n2);
+        if (p->n2 >= 64 && mpz_cmp_ui(tmp, 1) == 0)
+        {
+            while (mpz_tstbit(n, p->n2) == 0)
+            {
+                p->n2 += 1;
+            }
+            // the least significant half of the number is 0x0001....1
+            // precompute the most significant part of the number
+            mpz_div_2exp(p->a, n, p->n2);
+            p->proth = true;
+            p->montg = true;
+            p->special_case = true;
+        }
+    }
+
+    if (!p->special_case)
+    {
+        // precompute a variant of Barrett reduction
+        // b = 2^(3n/2) / n
+        // a = 2^(3n/2) % n
+        p->n2 = p->n >> 1;
+        p->n32 = p->n + p->n2;
+        mpz_set_ui(tmp, 1);
+        mpz_mul_2exp(tmp, tmp, p->n32);
+        mpz_divmod(p->b, p->a, tmp, n);
+    }
+
     mpz_clears(tmp, 0);
     return p;
 }
@@ -72,49 +108,69 @@ static void mpz_mod_uncompute(mod_precompute_t *p)
     }
 }
 
-static void mpz_mod_fast_reduce(mpz_t r, mpz_t x, struct mod_precompute_t *p)
+static void mpz_mod_fast_reduce(mpz_t r, struct mod_precompute_t *p)
 {
     mpz_t tmp, x_lo, x_hi;
     mpz_inits(tmp, x_lo, x_hi, 0);
 
-    mpz_set(r, x);
-
-    // special reduction for modulus = 2^n +/- e
-    if (p->power2me)
+    if (p->special_case)
     {
-        // while (hi != 0) lo += hi * e
-        mpz_div_2exp(x_hi, r, p->n);
-        while (mpz_sgn(x_hi) != 0)
+        if (p->proth)
         {
-            mpz_mod_2exp(x_lo, r, p->n);
-            mpz_mul_ui(x_hi, x_hi, p->e);
-            mpz_add(r, x_lo, x_hi);
-            mpz_div_2exp(x_hi, r, p->n);
+            mpz_div_2exp(x_hi, r, p->n2);
+            mpz_mod_2exp(x_lo, r, p->n2);
+            mpz_mul(x_lo, x_lo, p->a);
+            mpz_sub(tmp, x_lo, x_hi);
+            mpz_div_2exp(x_hi, tmp, p->n2);
+            mpz_mod_2exp(x_lo, tmp, p->n2);
+            mpz_mul(x_lo, x_lo, p->a);
+            mpz_sub(r, x_lo, x_hi);
+            if (mpz_sgn(r) < 0)
+            {
+                mpz_add(r, r, p->m);
+            }
+            else if (mpz_cmp(r, p->m) >= 0)
+            {
+                mpz_sub(r, r, p->m);
+            }
         }
-    }
-    else if (p->power2pe)
-    {
-        // while (hi != 0) lo -= hi * e
-        mpz_div_2exp(x_hi, r, p->n - 1);
-        while (mpz_cmp_ui(x_hi, 1) > 0)
+        // special reduction for modulus = 2^n +/- e
+        else if (p->power2me)
         {
-            mpz_mod_2exp(x_lo, r, p->n - 1);
-            mpz_mul_ui(x_hi, x_hi, p->e);
-            if (mpz_cmp(x_lo, x_hi) >= 0)
+            // while (hi != 0) lo += hi * e
+            mpz_div_2exp(x_hi, r, p->n);
+            while (mpz_sgn(x_hi) != 0)
             {
-                //    lo - hi * e
-                mpz_sub(r, x_lo, x_hi);
+                mpz_mod_2exp(x_lo, r, p->n);
+                mpz_mul_ui(x_hi, x_hi, p->e);
+                mpz_add(r, x_lo, x_hi);
+                mpz_div_2exp(x_hi, r, p->n);
             }
-            else
-            {
-                //    (lo + k * m) - hi * e
-                mpz_div_2exp(tmp, x_hi, p->n - 1);
-                mpz_add_ui(tmp, tmp, 1);
-                mpz_mul(tmp, tmp, p->m);
-                mpz_add(r, x_lo, tmp);
-                mpz_sub(r, r, x_hi);
-            }
+        }
+        else if (p->power2pe)
+        {
+            // while (hi != 0) lo -= hi * e
             mpz_div_2exp(x_hi, r, p->n - 1);
+            while (mpz_cmp_ui(x_hi, 1) > 0)
+            {
+                mpz_mod_2exp(x_lo, r, p->n - 1);
+                mpz_mul_ui(x_hi, x_hi, p->e);
+                if (mpz_cmp(x_lo, x_hi) >= 0)
+                {
+                    //    lo - hi * e
+                    mpz_sub(r, x_lo, x_hi);
+                }
+                else
+                {
+                    //    (lo + k * m) - hi * e
+                    mpz_div_2exp(tmp, x_hi, p->n - 1);
+                    mpz_add_ui(tmp, tmp, 1);
+                    mpz_mul(tmp, tmp, p->m);
+                    mpz_add(r, x_lo, tmp);
+                    mpz_sub(r, r, x_hi);
+                }
+                mpz_div_2exp(x_hi, r, p->n - 1);
+            }
         }
     }
     else
@@ -160,20 +216,36 @@ static void mpz_mod_fast_reduce(mpz_t r, mpz_t x, struct mod_precompute_t *p)
     mpz_clears(tmp, x_lo, x_hi, 0);
 }
 
-static void mpz_mod_slow_reduce(mpz_t r, mpz_t x, mpz_t m)
+static void mpz_mod_to_montg(mpz_t v, struct mod_precompute_t *p)
+{
+    if (p->montg)
+    {
+        mpz_mul_2exp(v, v, 2 * p->n2);
+        mpz_mod(v, v, p->m);
+    }
+}
+
+static void mpz_mod_from_montg(mpz_t v, struct mod_precompute_t *p)
+{
+    if (p->montg)
+    {
+        mpz_mod_fast_reduce(v, p);
+    }
+}
+
+static void mpz_mod_slow_reduce(mpz_t x, mpz_t m)
 {
     // subtract the modulus until underflow
-    mpz_set(r, x);
-    while (mpz_cmp(r, m) >= 0)
+    while (mpz_cmp(x, m) >= 0)
     {
-        mpz_sub(r, r, m);
+        mpz_sub(x, x, m);
     }
 }
 
 static void mpz_mod_add(mpz_t r, mpz_t a, mpz_t b, mpz_t m)
 {
     mpz_add(r, a, b);
-    mpz_mod_slow_reduce(r, r, m);
+    mpz_mod_slow_reduce(r, m);
 }
 
 // x % (2^b -1)
@@ -625,8 +697,12 @@ static void uint64_exponentiate(uint64_t &s, uint64_t &t, uint64_t &u, uint64_t 
 static void mpz_exponentiate(mpz_t s, mpz_t t, mpz_t u, mpz_t e, uint64_t a, mod_precompute_t *p)
 {
     int bit = mpz_sizeinbase(e, 2) - 1;
-    mpz_t tmp, s2, t2, u2, st, tu, us, uu, ss, tt;
-    mpz_inits(tmp, s2, t2, u2, st, tu, us, uu, ss, tt, 0);
+    mpz_t tmp, s2, t2, u2, st, tu, us;
+    mpz_inits(tmp, s2, t2, u2, st, tu, us, 0);
+
+    mpz_mod_to_montg(s, p);
+    mpz_mod_to_montg(t, p);
+    mpz_mod_to_montg(u, p);
 
     while (bit--)
     {
@@ -645,32 +721,36 @@ static void mpz_exponentiate(mpz_t s, mpz_t t, mpz_t u, mpz_t e, uint64_t a, mod
         if (mpz_tstbit(e, bit))
         {
             // add
-            mpz_add(uu, us, t2);
-            mpz_add(uu, uu, s2);
-            mpz_mul_ui(uu, uu, a);
-            mpz_add(ss, s2, st);
-            mpz_add(ss, ss, tu);
-            mpz_add(tt, u2, st);
-            mpz_add(tt, tt, uu);
+            mpz_add(u, us, t2);
+            mpz_add(u, u, s2);
+            mpz_mul_ui(u, u, a);
+            mpz_add(s, s2, st);
+            mpz_add(s, s, tu);
+            mpz_add(t, u2, st);
+            mpz_add(t, t, u);
         }
         else
         {
-            mpz_add(ss, s2, us);
-            mpz_add(ss, ss, t2);
-            mpz_add(tt, s2, st);
-            mpz_add(tt, tt, tu);
-            mpz_add(uu, u2, st);
+            mpz_add(s, s2, us);
+            mpz_add(s, s, t2);
+            mpz_add(t, s2, st);
+            mpz_add(t, t, tu);
+            mpz_add(u, u2, st);
         }
-        mpz_mod_fast_reduce(s, ss, p);
-        mpz_mod_fast_reduce(t, tt, p);
-        mpz_mod_fast_reduce(u, uu, p);
+        mpz_mod_fast_reduce(s, p);
+        mpz_mod_fast_reduce(t, p);
+        mpz_mod_fast_reduce(u, p);
     }
 
-    mpz_mod_slow_reduce(s, s, p->m);
-    mpz_mod_slow_reduce(t, t, p->m);
-    mpz_mod_slow_reduce(u, u, p->m);
+    mpz_mod_from_montg(s, p);
+    mpz_mod_from_montg(t, p);
+    mpz_mod_from_montg(u, p);
 
-    mpz_clears(tmp, s2, t2, u2, st, tu, us, uu, ss, tt, 0);
+    mpz_mod_slow_reduce(s, p->m);
+    mpz_mod_slow_reduce(t, p->m);
+    mpz_mod_slow_reduce(u, p->m);
+
+    mpz_clears(tmp, s2, t2, u2, st, tu, us, 0);
 }
 
 static bool uint64_cubic_primality(uint64_t n, bool verbose = false)
@@ -724,6 +804,8 @@ static bool uint64_cubic_primality(uint64_t n, bool verbose = false)
     {
         k += 1;
         a = 7 + k * (k - 1);
+        if (verbose)
+            printf("try k = %lu and a = %lu\n", k, a);
         if (!uint64_cubic_primality(a))
         {
             continue; // try another a
@@ -839,6 +921,8 @@ bool mpz_cubic_primality(mpz_t n, bool verbose)
     {
         k += 1;
         a = 7 + k * (k - 1);
+        if (verbose)
+            printf("try k = %lu and a = %lu\n", k, a);
         if (!uint64_cubic_primality(a))
         {
             continue; // try another a
@@ -1013,35 +1097,68 @@ void cubic_primality_self_test(void)
     mpz_add_ui(mb, ma, 0x1);
     mpz_mod_add(x, mb, mb, ma);
     assert(mpz_cmp_ui(x, 2) == 0);
-    mpz_mod_slow_reduce(x, x, ma);
+    mpz_mod_slow_reduce(x, ma);
     assert(mpz_cmp_ui(x, 2) == 0);
 
     printf("Fast modular reduction\n");
+    // verify generic modulus
     mpz_set_ui(ma, 0x1cc);
     mod_precompute_t *p = mpz_mod_precompute(ma);
+    assert(p->special_case == false);
     mpz_set_ui(mb, 0x2000ull * 0x1cc);
-    mpz_mod_fast_reduce(x, mb, p);
-    mpz_mod_slow_reduce(x, x, ma);
-    assert(mpz_get_ui(x) == 0);
+    mpz_mod_fast_reduce(mb, p);
+    mpz_mod_slow_reduce(mb, ma);
+    assert(mpz_get_ui(mb) == 0);
+    // clears temp structure
+    mpz_mod_uncompute(p);
+
+    // verify proth modulus
+    mpz_t mx;
+    mpz_init(mx);
+    mpz_set_ui(ma, 0xcdefabcdcdefabcdull);
+    mpz_mul_2exp(ma, ma, 64);
+    mpz_add_ui(ma, ma, 1);
+    p = mpz_mod_precompute(ma);
+    assert(p->special_case == true);
+    assert(p->montg == true);
+    assert(p->proth == true);
+    assert(p->n2 == 64);
+    assert(p->n == 128);
+    mpz_set_ui(ma, 0xabcdef01abcdef01ull);
+    mpz_mul(ma, ma, ma);
+    mpz_set_ui(mb, 0x1234567812345678ull);
+    mpz_mul(mb, mb, mb);
+    mpz_mul(x, ma, mb);
+    mpz_mod(x, x, p->m);
+    mpz_mod_to_montg(ma, p);
+    mpz_mod_to_montg(mb, p);
+    mpz_mul(mx, ma, mb);
+    mpz_mod_fast_reduce(mx, p);
+    mpz_mod_from_montg(mx, p);
+    assert(mpz_cmp(x, mx) == 0);
+    // clears temp structure
+    mpz_clear(mx);
     mpz_mod_uncompute(p);
 
     // verify (modulus + 0x17)^2 == 17*17
     mpz_set_ui(ma, 1);
     mpz_mul_2exp(ma, ma, 127);
     p = mpz_mod_precompute(ma);
+    assert(p->special_case == false);
     mpz_add_ui(mb, ma, 17);
     mpz_mul(x, mb, mb);
-    mpz_mod_fast_reduce(x, x, p);
-    mpz_mod_slow_reduce(x, x, ma);
+    mpz_mod_fast_reduce(x, p);
+    mpz_mod_slow_reduce(x, ma);
     assert(mpz_get_ui(x) == 17 * 17);
 
     // verify (modulus + 0x19)^4 == 17*17*17*17
     mpz_add_ui(mb, ma, 19);
     mpz_mul(x, mb, mb);
     mpz_mul(x, x, x);
-    mpz_mod_fast_reduce(x, x, p);
-    mpz_mod_slow_reduce(x, x, ma);
+    mpz_mod_fast_reduce(x, p);
+    mpz_mod_slow_reduce(x, ma);
     assert(mpz_get_ui(x) == 19 * 19 * 19 * 19);
+
     // clears temp structure
     mpz_mod_uncompute(p);
     p = 0;
