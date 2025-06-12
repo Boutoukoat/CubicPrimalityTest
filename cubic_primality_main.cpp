@@ -9,7 +9,7 @@
 #include <string.h>
 #include <time.h>
 
-#include "bison.gmp_expr.h"
+#include "expression_parser.h"
 #include "cubic_primality.h"
 #include "cubic_primality_alloc.h"
 
