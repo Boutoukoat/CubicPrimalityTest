@@ -26,6 +26,9 @@ static struct mod_precompute_t *mpz_mod_precompute(mpz_t n)
     p->power2me = false;
     mpz_inits(tmp, p->a, p->b, p->m, 0);
     p->n = mpz_sizeinbase(n, 2);
+    p->n2 = 0;
+    p->n32 = 0;
+    p->e = 0;
     mpz_set(p->m, n);
 
     // check a power of 2 minus e
@@ -63,7 +66,11 @@ static struct mod_precompute_t *mpz_mod_precompute(mpz_t n)
             }
             // the least significant half of the number is 0x0001....1
             // precompute the most significant part of the number
-            mpz_div_2exp(p->a, n, p->n2);
+            mpz_div_2exp(p->b, n, p->n2);
+            p->n32 = p->n + p->n2;
+            mpz_set_ui(tmp, 1);
+            mpz_mul_2exp(tmp, tmp, p->n32);
+            mpz_mod(p->a, tmp, n);
             p->proth = true;
             p->montg = true;
             p->special_case = true;
@@ -104,13 +111,22 @@ void mpz_mod_fast_reduce(mpz_t r, struct mod_precompute_t *p)
     {
         if (p->proth)
         {
+            mpz_div_2exp(x_hi, r, p->n32);
+            if (mpz_sgn(x_hi) != 0)
+            {
+            // x_hi * a + x_lo
+            mpz_mod_2exp(x_lo, r, p->n32);
+            mpz_mul(x_hi, x_hi, p->a);
+            mpz_add(r, x_hi, x_lo);
+            }
+
             mpz_div_2exp(x_hi, r, p->n2);
             mpz_mod_2exp(x_lo, r, p->n2);
-            mpz_mul(x_lo, x_lo, p->a);
+            mpz_mul(x_lo, x_lo, p->b);
             mpz_sub(tmp, x_lo, x_hi);
             mpz_div_2exp(x_hi, tmp, p->n2);
             mpz_mod_2exp(x_lo, tmp, p->n2);
-            mpz_mul(x_lo, x_lo, p->a);
+            mpz_mul(x_lo, x_lo, p->b);
             mpz_sub(r, x_lo, x_hi);
             if (mpz_sgn(r) < 0)
             {
@@ -246,13 +262,14 @@ static uint64_t mpz_mod_mersenne(mpz_t x, uint64_t b)
     if ((b & (b - 1)) == 0)
     {
         // an exact power of 2
-        for (unsigned i = 1; i < s; i += 1)
+        for (unsigned i = 0; i < s; i += 1)
         {
             r += array[i];
         }
     }
     else
     {
+	    // add, shift first, and reduce after
         unsigned c = 0;
         for (unsigned i = 0; i < b; i += 1)
         {
