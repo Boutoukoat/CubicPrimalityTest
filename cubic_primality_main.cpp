@@ -8,7 +8,7 @@
 #include <string.h>
 #include <time.h>
 
-#include "bison.gmp_expr.h"
+#include "expression_parser.h"
 #include "cubic_primality.h"
 
 static void cubic_primality_file(char *name, bool verbose)
