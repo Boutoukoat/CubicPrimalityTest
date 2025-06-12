@@ -2,17 +2,28 @@
 
 GGG = g++ -O3 -march=native -fomit-frame-pointer -fexpensive-optimizations
 
-OBJ = cubic_primality_main.o cubic_primality.o bison.gmp_expr.o lex.gmp_expr.o
+OBJ = cubic_primality_main.o \
+      cubic_primality.o \
+      cubic_primality_alloc.o \
+      cubic_primality_mt.o \
+      bison.gmp_expr.o \
+      lex.gmp_expr.o
 
 
 cubic: $(OBJ)
-	$(GGG) -static -o cubic $(OBJ) -lgmp
+	$(GGG) -static -o cubic $(OBJ) -lgmp -lpthread
 
 cubic_primality_main.o: cubic_primality_main.cpp cubic_primality.h
 	$(GGG) -c -o cubic_primality_main.o cubic_primality_main.cpp
 
+cubic_primality_alloc.o: cubic_primality_alloc.cpp cubic_primality_alloc.h
+	$(GGG) -c -o cubic_primality_alloc.o cubic_primality_alloc.cpp
+
 cubic_primality.o: cubic_primality.cpp cubic_primality.h
 	$(GGG) -c -o cubic_primality.o cubic_primality.cpp
+
+cubic_primality_mt.o: cubic_primality_mt.cpp cubic_primality_mt.h
+	$(GGG) -c -o cubic_primality_mt.o cubic_primality_mt.cpp
 
 bison.gmp_expr.o : bison.gmp_expr.tab.c bison.gmp_expr.h
 	$(GGG) -c -o bison.gmp_expr.o bison.gmp_expr.tab.c

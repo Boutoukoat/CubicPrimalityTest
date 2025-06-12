@@ -3,6 +3,7 @@
 // -----------------------------------------------------------------------
 
 #include <ctype.h>
+#include <stdint.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -10,6 +11,7 @@
 
 #include "bison.gmp_expr.h"
 #include "cubic_primality.h"
+#include "cubic_primality_alloc.h"
 
 static void cubic_primality_file(char *name, bool verbose)
 {
@@ -41,10 +43,17 @@ static void cubic_primality_file(char *name, bool verbose)
             }
             if (*pt && *pt != '#') // discard empty lines or comments
             {
-		    if (verbose) { printf("%s ...", pt); fflush(stdout); }
+                if (verbose)
+                {
+                    printf("%s ...", pt);
+                    fflush(stdout);
+                }
                 mpz_expression_parse(v, pt);
                 bool is_prime = mpz_cubic_primality(v);
-		if (verbose) { printf(" %s\n", is_prime ? "might be prime": "composite for sure"); }
+                if (verbose)
+                {
+                    printf(" %s\n", is_prime ? "might be prime" : "composite for sure");
+                }
                 prime_count += (is_prime == true);
                 composite_count += (is_prime == false);
             }
@@ -56,6 +65,9 @@ static void cubic_primality_file(char *name, bool verbose)
 
 int main(int argc, char **argv)
 {
+
+    mp_set_memory_functions(cubic_allocate_function, cubic_reallocate_function, cubic_free_function);
+
     bool verbose = false;
     for (int i = 1; i < argc; i++)
     {

@@ -2,35 +2,22 @@
 // Collatz step function calculator
 // -----------------------------------------------------------------------
 
-#include "cubic_primality.h"
 #include <assert.h>
 #include <math.h>
 #include <stdint.h>
 #include <stdio.h>
 #include <string.h>
 
-typedef unsigned __int128 uint128_t;
+#include "cubic_primality.h"
+#include "cubic_primality_alloc.h"
+#include "cubic_primality_mt.h"
 
-struct mod_precompute_t
-{
-    mpz_t a;
-    mpz_t b;
-    mpz_t m;
-    uint64_t n;
-    uint64_t n32;
-    uint64_t n2;
-    bool special_case;
-    bool montg;
-    bool proth;
-    bool power2me;
-    bool power2pe;
-    uint64_t e;
-};
+typedef unsigned __int128 uint128_t;
 
 static struct mod_precompute_t *mpz_mod_precompute(mpz_t n)
 {
     mpz_t tmp;
-    mod_precompute_t *p = (mod_precompute_t *)calloc(sizeof(mod_precompute_t), 1);
+    mod_precompute_t *p = (mod_precompute_t *)cubic_allocate_function(sizeof(mod_precompute_t));
 
     p->special_case = false;
     p->proth = false;
@@ -104,11 +91,11 @@ static void mpz_mod_uncompute(mod_precompute_t *p)
     if (p)
     {
         mpz_clears(p->a, p->b, p->m, 0);
-        free(p);
+        cubic_free_function(p, sizeof(struct mod_precompute_t));
     }
 }
 
-static void mpz_mod_fast_reduce(mpz_t r, struct mod_precompute_t *p)
+void mpz_mod_fast_reduce(mpz_t r, struct mod_precompute_t *p)
 {
     mpz_t tmp, x_lo, x_hi;
     mpz_inits(tmp, x_lo, x_hi, 0);
@@ -254,26 +241,42 @@ static uint64_t mpz_mod_mersenne(mpz_t x, uint64_t b)
     uint64_t mask = (1ull << b) - 1;
     unsigned s = mpz_size(x);
     const mp_limb_t *array = mpz_limbs_read(x);
-    unsigned c = 0;
     uint128_t t, r = 0;
-    for (unsigned i = 0; i < b; i += 1)
+
+    if ((b & (b - 1)) == 0)
     {
-        t = 0;
-        for (unsigned j = i; j < s; j += b)
+        // an exact power of 2
+        for (unsigned i = 1; i < s; i += 1)
         {
-            t += array[j];
-        }
-        t = (t & mask) + (t >> b);
-        t = t << c;
-        r += t;
-        r = (r & mask) + (r >> b);
-        c += 64;
-        while (c >= b)
-        {
-            c -= b;
+            r += array[i];
         }
     }
-    r = (r & mask) + (r >> b);
+    else
+    {
+        unsigned c = 0;
+        for (unsigned i = 0; i < b; i += 1)
+        {
+            t = 0;
+            for (unsigned j = i; j < s; j += b)
+            {
+                t += array[j];
+            }
+            t = (t & mask) + (t >> b);
+            t = t << c;
+            r += t;
+            r = (r & mask) + (r >> b);
+            c += 64;
+            while (c >= b)
+            {
+                c -= b;
+            }
+        }
+    }
+    // reduce mod 2^b - 1
+    while (r >> 64)
+    {
+        r = (r & mask) + (r >> b);
+    }
     return (uint64_t)r;
 }
 
@@ -653,7 +656,7 @@ static sieve_t mpz_composite_sieve(mpz_t n)
 // Make output s,t,u < n < 2^61
 static void uint64_exponentiate(uint64_t &s, uint64_t &t, uint64_t &u, uint64_t e, uint64_t n, uint64_t a)
 {
-    int bit = 63 - __builtin_clzll(e);
+    unsigned bit = 63 - __builtin_clzll(e);
     uint128_t s2, t2, u2, st, tu, us, uu, ss, tt;
     uint64_t tmp;
 
@@ -694,11 +697,11 @@ static void uint64_exponentiate(uint64_t &s, uint64_t &t, uint64_t &u, uint64_t 
 // Iterate a third order linear recurrence using "double and add" steps
 // Computes (s,t,u)^e mod n
 // Make output s,t,u < n
-static void mpz_exponentiate(mpz_t s, mpz_t t, mpz_t u, mpz_t e, uint64_t a, mod_precompute_t *p)
+static void mpz_singlethread_exponentiate(mpz_t s, mpz_t t, mpz_t u, mpz_t e, uint64_t a, mod_precompute_t *p)
 {
-    int bit = mpz_sizeinbase(e, 2) - 1;
-    mpz_t tmp, s2, t2, u2, st, tu, us;
-    mpz_inits(tmp, s2, t2, u2, st, tu, us, 0);
+    unsigned bit = mpz_sizeinbase(e, 2) - 1;
+    mpz_t s2, t2, u2, st, tu, us;
+    mpz_inits(s2, t2, u2, st, tu, us, 0);
 
     mpz_mod_to_montg(s, p);
     mpz_mod_to_montg(t, p);
@@ -750,7 +753,24 @@ static void mpz_exponentiate(mpz_t s, mpz_t t, mpz_t u, mpz_t e, uint64_t a, mod
     mpz_mod_slow_reduce(t, p->m);
     mpz_mod_slow_reduce(u, p->m);
 
-    mpz_clears(tmp, s2, t2, u2, st, tu, us, 0);
+    mpz_clears(s2, t2, u2, st, tu, us, 0);
+}
+
+static void mpz_multithread_exponentiate(mpz_t s, mpz_t t, mpz_t u, mpz_t e, uint64_t a, mod_precompute_t *p)
+{
+    mpz_mod_to_montg(s, p);
+    mpz_mod_to_montg(t, p);
+    mpz_mod_to_montg(u, p);
+
+    mpz_inner_multithread_exponentiate(s, t, u, e, a, p);
+
+    mpz_mod_from_montg(s, p);
+    mpz_mod_from_montg(t, p);
+    mpz_mod_from_montg(u, p);
+
+    mpz_mod_slow_reduce(s, p->m);
+    mpz_mod_slow_reduce(t, p->m);
+    mpz_mod_slow_reduce(u, p->m);
 }
 
 static bool uint64_cubic_primality(uint64_t n, bool verbose = false)
@@ -962,7 +982,7 @@ bool mpz_cubic_primality(mpz_t n, bool verbose)
         mpz_set_ui(bt, 1);
         mpz_set_ui(bu, 0);
         mpz_sub_ui(e, n, 1);
-        mpz_exponentiate(bs, bt, bu, e, a, pcpt);
+        mpz_singlethread_exponentiate(bs, bt, bu, e, a, pcpt);
         if (mpz_sgn(bs) == 0 && mpz_sgn(bt) == 0 && mpz_cmp_ui(bu, 1) == 0)
         {
             // todo : composite for sure
@@ -982,7 +1002,7 @@ bool mpz_cubic_primality(mpz_t n, bool verbose)
     if (!pcpt)
         pcpt = mpz_mod_precompute(n);
 
-    mpz_exponentiate(bs2, bt2, bu2, e, a, pcpt);
+    mpz_singlethread_exponentiate(bs2, bt2, bu2, e, a, pcpt);
     // check the final condition (B^2 + B + 1) == (-1, 1, a)
     mpz_add_ui(bs2, bs2, 1);
     mpz_mod_add(bs2, bs2, bs, n);
