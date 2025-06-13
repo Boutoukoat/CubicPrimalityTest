@@ -111,13 +111,16 @@ void mpz_mod_fast_reduce(mpz_t r, struct mod_precompute_t *p)
     {
         if (p->proth)
         {
-            mpz_div_2exp(x_hi, r, p->n32);
-            if (mpz_sgn(x_hi) != 0)
+            if (mpz_sizeinbase(r, 2) > 2 * p->n + 2)
             {
-            // x_hi * a + x_lo
-            mpz_mod_2exp(x_lo, r, p->n32);
-            mpz_mul(x_hi, x_hi, p->a);
-            mpz_add(r, x_hi, x_lo);
+                mpz_div_2exp(x_hi, r, p->n32);
+                if (mpz_sgn(x_hi) != 0)
+                {
+                    // x_hi * a + x_lo
+                    mpz_mod_2exp(x_lo, r, p->n32);
+                    mpz_mul(x_hi, x_hi, p->a);
+                    mpz_add(r, x_hi, x_lo);
+                }
             }
 
             mpz_div_2exp(x_hi, r, p->n2);
@@ -269,7 +272,7 @@ static uint64_t mpz_mod_mersenne(mpz_t x, uint64_t b)
     }
     else
     {
-	    // add, shift first, and reduce after
+        // add, shift first, and reduce after
         unsigned c = 0;
         for (unsigned i = 0; i < b; i += 1)
         {

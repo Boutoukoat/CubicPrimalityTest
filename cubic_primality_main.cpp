@@ -9,9 +9,9 @@
 #include <string.h>
 #include <time.h>
 
-#include "expression_parser.h"
 #include "cubic_primality.h"
 #include "cubic_primality_alloc.h"
+#include "expression_parser.h"
 
 static void cubic_primality_file(char *name, bool verbose)
 {
@@ -78,15 +78,22 @@ int main(int argc, char **argv)
             printf("Self tests completed\n");
             exit(0);
         }
-        else if (!strcmp(argv[i], "-h"))
+        else if (!strcmp(argv[i], "--help"))
         {
             printf("%s usage : \n", argv[0]);
-            printf(" -v ................... : verbose\n");
-            printf(" -st .................. : self-test\n");
+            printf(" --help ............... : this\n");
+            printf(" --version ............ : print the software version\n");
+            printf(" -v ................... : enable verbose mode (should be before expressions)\n");
+            printf(" -st .................. : run self-test and exit\n");
             printf(" -f filename .......... : test multiple expressions in a file, one per line, count primes and "
                    "composites\n");
             printf(" expressions .......... : space-separated numerical expressions to be tested like 2*3^12+1\n");
             printf("\n");
+            exit(0);
+        }
+        else if (!strcmp(argv[i], "--version"))
+        {
+            printf("Version 0.2\n");
             exit(0);
         }
         else if (!strcmp(argv[i], "-v"))

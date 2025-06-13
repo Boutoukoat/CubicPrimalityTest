@@ -105,18 +105,18 @@ static unsigned mod_multithread_get_result(mod_multithread_t *mt)
 
 // Ideally this would be the actions of a usual state machine if implemented as single thread.
 
-#define FLAG_S      0x1
-#define FLAG_T      0x2
-#define FLAG_U      0x4
-#define FLAG_S2     0x8
-#define FLAG_T2    0x10
-#define FLAG_U2    0x20
-#define FLAG_ST    0x40
-#define FLAG_TU    0x80
-#define FLAG_US   0x100
+#define FLAG_S 0x1
+#define FLAG_T 0x2
+#define FLAG_U 0x4
+#define FLAG_S2 0x8
+#define FLAG_T2 0x10
+#define FLAG_U2 0x20
+#define FLAG_ST 0x40
+#define FLAG_TU 0x80
+#define FLAG_US 0x100
 #define FLAG_INIT 0x200
-#define FLAG_E   0x8000
-#define FLAG_END    0x0
+#define FLAG_E 0x8000
+#define FLAG_END 0x0
 
 static void *mod_worker(void *arg)
 {
@@ -360,7 +360,7 @@ void inner_mutithread_exponentiate(mpz_t s, mpz_t t, mpz_t u, mpz_t e, uint64_t 
             mod_multithread_notify_ready(mt, FLAG_U2);
             continue;
         }
-	mask = FLAG_TU | FLAG_ST | FLAG_T2 | FLAG_US;
+        mask = FLAG_TU | FLAG_ST | FLAG_T2 | FLAG_US;
         if ((flags & mask) == mask && (result & FLAG_S2))
         {
             flags &= ~(FLAG_S | FLAG_T);
@@ -369,7 +369,7 @@ void inner_mutithread_exponentiate(mpz_t s, mpz_t t, mpz_t u, mpz_t e, uint64_t 
             flags |= FLAG_S2;
             continue;
         }
-	mask = FLAG_S2 | FLAG_TU | FLAG_U2;
+        mask = FLAG_S2 | FLAG_TU | FLAG_U2;
         if ((flags & mask) == mask && (result & FLAG_ST))
         {
             flags &= ~(FLAG_T | FLAG_U);
@@ -379,47 +379,47 @@ void inner_mutithread_exponentiate(mpz_t s, mpz_t t, mpz_t u, mpz_t e, uint64_t 
             continue;
         }
         if ((flags & (FLAG_S2 | FLAG_US)) == (FLAG_S2 | FLAG_US) && (result & FLAG_T2))
-	{
+        {
             flags &= ~FLAG_S;
             mod_multithread_notify_ready(mt, FLAG_S | exponent_bit);
             flags |= FLAG_T2;
             continue;
-	}
+        }
         if ((flags & (FLAG_T2 | FLAG_US)) == (FLAG_T2 | FLAG_US) && (result & FLAG_S2))
-	{
+        {
             flags &= ~FLAG_S;
             mod_multithread_notify_ready(mt, FLAG_S | exponent_bit);
             flags |= FLAG_S2;
             continue;
-	}
+        }
         if ((flags & (FLAG_S2 | FLAG_T2)) == (FLAG_S2 | FLAG_T2) && (result & FLAG_US))
-	{
+        {
             flags &= ~FLAG_S;
             mod_multithread_notify_ready(mt, FLAG_S | exponent_bit);
             flags |= FLAG_US;
             continue;
-	}
+        }
         if ((flags & (FLAG_S2 | FLAG_ST)) == (FLAG_S2 | FLAG_ST) && (result & FLAG_TU))
-	{
+        {
             flags &= ~FLAG_T;
             mod_multithread_notify_ready(mt, FLAG_T | exponent_bit);
             flags |= FLAG_TU;
             continue;
-	}
+        }
         if ((flags & (FLAG_S2 | FLAG_TU)) == (FLAG_S2 | FLAG_TU) && (result & FLAG_ST))
-	{
+        {
             flags &= ~FLAG_T;
             mod_multithread_notify_ready(mt, FLAG_T | exponent_bit);
             flags |= FLAG_ST;
             continue;
-	}
+        }
         if ((flags & (FLAG_ST | FLAG_TU)) == (FLAG_ST | FLAG_TU) && (result & FLAG_S2))
-	{
+        {
             flags &= ~FLAG_T;
             mod_multithread_notify_ready(mt, FLAG_T | exponent_bit);
             flags |= FLAG_S2;
             continue;
-	}
+        }
         if ((flags & (FLAG_ST)) == (FLAG_ST) && (result & FLAG_U2))
         {
             flags &= ~FLAG_U;
