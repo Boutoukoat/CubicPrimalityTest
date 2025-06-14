@@ -31,10 +31,13 @@ void *cubic_reallocate_function(void *ptr, size_t old_size, size_t new_size)
     ptr = realloc(ptr, new_size + 64);
     if (!((uintptr_t)ptr & 63))
     {
+        // aligned pointer
         return ptr;
     }
+    // unaligned pointer
     void *newptr = aligned_alloc(64, new_size + 64);
-    memcpy(newptr, ptr, new_size);
+    memcpy(newptr, ptr, old_size < new_size ? old_size : new_size);
+    free(ptr);
     return newptr;
 }
 
