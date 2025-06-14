@@ -9,7 +9,6 @@ OBJ = cubic_primality_main.o \
       expression_parser.a
 
 cubic: $(OBJ)
-	# $(GGG) -static -o cubic $(OBJ) /home/pierre/Downloads/gmp-6.3.0/.libs/libgmp.a -lpthread
 	$(GGG) -static -o cubic $(OBJ) -lgmp -lpthread
 
 cubic_primality_main.o: cubic_primality_main.cpp cubic_primality.h cubic_primality_alloc.h expression_parser.h
