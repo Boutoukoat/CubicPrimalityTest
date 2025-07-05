@@ -1,4 +1,5 @@
 
+#include <assert.h>
 #include <math.h>
 #include <pthread.h>
 #include <stdbool.h>
@@ -87,6 +88,22 @@ template <> uint64_t mul_mod<uint64_t, uint128_t>(const uint64_t &u, const uint6
     return r;
 }
 
+template <class T> static T sub_mod(const T &u, const T &v, const T &q)
+{
+    T s = u - v;
+    if (s <= u)
+    {
+        s %= q;
+    }
+    else
+    {
+        s = -s;
+        s %= q;
+        s = q - s;
+    }
+    return s;
+}
+
 template <class T, class TT> static T add_mod(const T &u, const T &v, const T &q)
 {
     TT r = u;
@@ -95,25 +112,32 @@ template <class T, class TT> static T add_mod(const T &u, const T &v, const T &q
     return (T)r;
 }
 
-template <class T, class TT> static T sub_mod(const T &u, const T &v, const T &q)
-{
-    if (u >= v)
-    {
-        return u - v;
-    }
-    T s = v;
-    if (s >= q)
-        s %= q;
-    TT r = u;
-    r += q - s;
-    r %= q;
-    return (T)r;
-}
-
 template <class T, class TT> static T mod(const TT &u, const T &q)
 {
     TT r = u;
     r %= q;
+    return (T)r;
+}
+
+template <class T, class TT> static TT square(const T &u)
+{
+    TT r = u;
+    r *= u;
+    return (T)r;
+}
+
+template <class T, class TT> static TT mul(const T &u, const T &v)
+{
+    TT r = u;
+    r *= v;
+    return (T)r;
+}
+
+template <class T, class TT> static TT mul2(const T &u, const T &v)
+{
+    TT r = u;
+    r *= v;
+    r <<= 1;
     return (T)r;
 }
 
@@ -145,6 +169,46 @@ template <class T> static T gcd(const T &x, const T &y)
     }
 }
 
+template <class T, class TT> static T modinv(const T &x, const T &m)
+{
+    if (m < 3)
+        return 0;
+    if (x < 2)
+        return x;
+    T a = x, b = m, u = 1, v = 0;
+    while (a != 0)
+    {
+        unsigned ta = __builtin_ctzll(a);
+        a >>= ta;
+        while (ta--)
+        {
+            if (u & 1)
+            {
+                TT tu = u;
+                tu += m;
+                tu >>= 1;
+                u = (T)tu;
+            }
+            else
+            {
+                u >>= 1;
+            }
+        }
+        if (a < b)
+        {
+            T t = a;
+            T s = u;
+            a = b;
+            u = v;
+            b = t;
+            v = s;
+        }
+        a -= b;
+        u = sub_mod<T>(u, v, m);
+    }
+    return v;
+}
+
 template <class T, class TT> static bool is_perfect_cube(const T &a)
 {
     if (0x3f7fffe7e7fffefcull & (1ull << (a % 63)))
@@ -163,15 +227,7 @@ template <class T, class TT> static bool is_perfect_cube(const T &a)
         return false;
     if (0xedc & (1 << (a % 13)))
         return false;
-    /*
-       if ( 0x3c & (1 << (a % 7 ))) return false;
-       if ( 0xfc & (1 << (a % 9 ))) return false;
-       if ( 0xedc & (1 << (a % 13 ))) return false;
-       if ( 0x3e67c & (1 << (a % 19 ))) return false;
-       if ( 0x177e7ee8 & (1 << (a % 31 ))) return false;
-       if ( 0xf537fb2bcull & (1ull << (a % 37 ))) return false;
-       if ( 0xbcbfd99e66ff4f4ull & (1ull << (a % 61 ))) return false;
-     */
+
     // approximation of cubic root with floating point accuracy
     double d = (double)a;
     d = exp(log(d) / 3.0); // cubic root
@@ -201,6 +257,55 @@ template <class T, class TT> static bool is_perfect_cube(const T &a)
         }
     }
     c = r * r * r; // check perfect cube
+    return (c == a);
+}
+
+template <class T, class TT> static bool is_perfect_sursolid(const T &a)
+{
+    if (0x1f7fef8fbff7cull & (1ull << (a % 50)))
+        return false;
+    if (0x7fcff5fe7fcull & (1ull << (a % 44)))
+        return false;
+    if (0xffa7efedfdf97fcull & (1ull << (a % 61)))
+        return false;
+    if (0xbef7ffbdf4ull & (1ull << (a % 41)))
+        return false;
+    if (0x39ffff9cull & (1ull << (a % 31)))
+        return false;
+    if (0x1249248ull & (1ull << (a % 27)))
+        return false;
+    if (0x40810204080ull & (1ull << (a % 49)))
+        return false;
+
+    // approximation of cubic root with floating point accuracy
+    double d = (double)a;
+    d = exp(log(d) / 5.0); // fifth root
+    double dl = d * 0.999999;
+    double dh = d * 1.000001;
+    T c, m;
+    // binary search (1 more bit of fifth root per iteration)
+    T r = (T)d;
+    T l = (T)dl;
+    T h = (T)dh;
+    while (l <= h)
+    {
+        m = (l + h) >> 1;
+        c = m * m * m * m * m;
+        if (c == a)
+        {
+            return true; // perfect sursolid
+        }
+        if (c < a)
+        {
+            l = m + 1;
+            r = m;
+        }
+        else
+        {
+            h = m - 1;
+        }
+    }
+    c = r * r * r * r * r; // check perfect sursolid
     return (c == a);
 }
 
@@ -377,7 +482,7 @@ template <class T, class TT> static bool isprime(const T &n)
            witness<T, TT>(n, s, d, 29) && witness<T, TT>(n, s, d, 31) && witness<T, TT>(n, s, d, 37);
 }
 
-template <class T, class TT> void exponentiate(T &s, T &t, T &u, const T e, const T n, const T a)
+template <class T, class TT> void ok_exponentiate3(T &s, T &t, T &u, const T e, const T n, const T a)
 {
     int bit = log_2<T>(e);
     T tmp;
@@ -417,7 +522,66 @@ template <class T, class TT> void exponentiate(T &s, T &t, T &u, const T e, cons
     }
 }
 
-template <class T, class TT> static bool islnrcprime(const T &n, int s = 0, int cid = 0)
+//  Mod(Mod(s*x+t,n),x^2-a)^e
+template <class T, class TT> void exponentiate2(T &s, T &t, const T e, const T n, const T a)
+{
+    unsigned bit = log_2<T>(e);
+    while (bit--)
+    {
+        T y2 = square_mod<T, TT>(s, n);
+        T z2 = square_mod<T, TT>(t, n);
+        TT ty = mul_mod<T, TT>(s, t, n);
+        ty += ty;
+        TT tz = (TT)y2 * a + z2;
+
+        if (e & (1ull << bit))
+        {
+            TT sy = ty;
+            ty = tz;
+            tz = sy * a;
+        }
+
+        s = mod<T, TT>(ty, n);
+        t = mod<T, TT>(tz, n);
+    }
+}
+
+template <class T, class TT> void exponentiate3(T &s, T &t, T &u, const T e, const T n, const T a)
+{
+    unsigned bit = log_2<T>(e);
+    T tmp;
+
+    while (bit--)
+    {
+        TT rt0 = (TT)a * square_mod<T, TT>(s, n);
+        TT rt1 = (TT)a * mul_mod<T, TT>(s, t, n);
+        rt1 += rt1;
+        TT q0 = mul_mod<T, TT>(s, u, n);
+        q0 += q0;
+        q0 += square_mod<T, TT>(t, n);
+        q0 += rt0;
+        TT q1 = mul_mod<T, TT>(t, u, n);
+        q1 += q1;
+        q1 += rt0;
+        q1 += rt1;
+        TT q2 = square_mod<T, TT>(u, n);
+        q2 += rt1;
+
+        if (e & (1ull << bit))
+        {
+            TT rt2 = q0 * a;
+            q0 = q1;
+            q1 = q2 + rt2;
+            q2 = rt2;
+        }
+
+        s = mod<T, TT>(q0, n);
+        t = mod<T, TT>(q1, n);
+        u = mod<T, TT>(q2, n);
+    }
+}
+
+template <class T, class TT> static bool islnrc3prime(const T &n, int s = 0, int cid = 0)
 {
     if (n < 23)
     {
@@ -458,9 +622,10 @@ template <class T, class TT> static bool islnrcprime(const T &n, int s = 0, int 
         bs = 0;
         bt = 1;
         bu = 0;
-        exponentiate<T, TT>(bs, bt, bu, n - 1, n, a);
+        exponentiate3<T, TT>(bs, bt, bu, n - 1, n, a);
         if (bs == 0 && bt == 0 && bu == 1)
         {
+            // log this cornercase for verification purposes
             if (s | cid)
             {
                 tlv_write(s, cid, TLV_B1, n);
@@ -470,7 +635,7 @@ template <class T, class TT> static bool islnrcprime(const T &n, int s = 0, int 
         break;
     }
     T bs2 = bs, bt2 = bt, bu2 = bu;
-    exponentiate<T, TT>(bs2, bt2, bu2, 2, n, a);
+    exponentiate3<T, TT>(bs2, bt2, bu2, 2, n, a);
     bs = add_mod<T, TT>(bs, bs2, n);
     bt = add_mod<T, TT>(bt, bt2, n);
     bu = add_mod<T, TT>(bu, bu2, n);
@@ -480,7 +645,164 @@ template <class T, class TT> static bool islnrcprime(const T &n, int s = 0, int 
     return true;      // might be prime
 }
 
-template <class T, class TT> static int loop(int s, uint16_t cid, const TT &seed, uint64_t count)
+template <class T, class TT> void exponentiate5(T &vm, T &wm, T &xm, T &ym, T &zm, const T e, const T n, const T a)
+{
+    int bit = log_2<T>(e);
+
+    const T p = 0;
+    const T q = 0;
+    const T r = 0;
+    const T s = a;
+    const T t = 4 * a;
+
+    const T bp = p * p + q;
+    const T bq = p * q + r;
+    const T br = p * r + s;
+    const T bs = p * s + t;
+    const T bt = p * t;
+
+    const T cp = bp * p + bq;
+    const T cq = bp * q + br;
+    const T cr = bp * r + bs;
+    const T cs = bp * s + bt;
+    const T ct = bp * t;
+
+    const T dp = cp * p + cq;
+    const T dq = cp * q + cr;
+    const T dr = cp * r + cs;
+    const T ds = cp * s + ct;
+    const T dt = cp * t;
+
+    TT tmp;
+    T t0, t1, t2, t3, t4;
+    TT qv, qw, qx, qy, qz;
+    while (bit--)
+    {
+        tmp = square<T, TT>(vm);
+        t0 = mod<T, TT>(tmp, n);
+        tmp = mul2<T, TT>(vm, wm);
+        t1 = mod<T, TT>(tmp, n);
+        tmp = square<T, TT>(wm) + mul2<T, TT>(vm, xm);
+        t2 = mod<T, TT>(tmp, n);
+        tmp = mul2<T, TT>(wm, xm) + mul2<T, TT>(vm, ym);
+        t3 = mod<T, TT>(tmp, n);
+        qv = mul<T, TT>(dp, t0) + mul<T, TT>(cp, t1) + mul<T, TT>(bp, t2) + mul<T, TT>(p, t3) + square<T, TT>(xm) +
+             mul2<T, TT>(wm, ym) + mul2<T, TT>(vm, zm);
+        qw = mul<T, TT>(dq, t0) + mul<T, TT>(cq, t1) + mul<T, TT>(bq, t2) + mul<T, TT>(q, t3) + mul2<T, TT>(xm, ym) +
+             mul2<T, TT>(wm, zm);
+        qx = mul<T, TT>(dr, t0) + mul<T, TT>(cr, t1) + mul<T, TT>(br, t2) + mul<T, TT>(r, t3) + square<T, TT>(ym) +
+             mul2<T, TT>(xm, zm);
+        qy = mul<T, TT>(ds, t0) + mul<T, TT>(cs, t1) + mul<T, TT>(bs, t2) + mul<T, TT>(s, t3) + mul2<T, TT>(ym, zm);
+        qz = mul<T, TT>(dt, t0) + mul<T, TT>(ct, t1) + mul<T, TT>(bt, t2) + mul<T, TT>(t, t3) + square<T, TT>(zm);
+
+        if (e & (1ull << bit))
+        {
+            t4 = mod<T, TT>(qv, n);
+            qv = mul<T, TT>(p, t4) + qw;
+            qw = mul<T, TT>(q, t4) + qx;
+            qx = mul<T, TT>(r, t4) + qy;
+            qy = mul<T, TT>(s, t4) + qz;
+            qz = mul<T, TT>(t, t4);
+        }
+
+        vm = mod<T, TT>(qv, n);
+        wm = mod<T, TT>(qw, n);
+        xm = mod<T, TT>(qx, n);
+        ym = mod<T, TT>(qy, n);
+        zm = mod<T, TT>(qz, n);
+    }
+}
+
+template <class T, class TT> static bool islnrc5prime(const T &n, int s = 0, int cid = 0)
+{
+    if (n < 23)
+    {
+        // prime for sure
+        return (n == 1 || n == 2 || n == 3 || n == 5 || n == 7 || n == 11 || n == 13 || n == 17 || n == 19);
+    }
+
+    if (is_perfect_sursolid<T, TT>(n))
+    {
+        return false; // composite
+    }
+
+    T k, a, bv, bw, bx, by, bz;
+    for (k = 1;; k++)
+    {
+        a = 19 + k * (k - 1);
+        if (a % 5 != 1)
+        {
+            continue; // try another a
+        }
+        if (!isprime<T, TT>(a))
+        {
+            continue; // try another a
+        }
+        if (power<T, TT>(mod<T, TT>(n, a), (a - 1) / 5, a) == 1)
+        {
+            continue; // try another a
+        }
+        if (a == n)
+        {
+            return true; // n is a small prime
+        }
+        T g = gcd((2 * k - 1) * a * (2 * a - 1), n);
+        if (g == n)
+        {
+            continue; // try another a
+        }
+        if (g > 1)
+        {
+            return false; //  composite
+        }
+        bv = 0;
+        bw = 0;
+        bx = 0;
+        by = 1;
+        bz = 0;
+        exponentiate5<T, TT>(bv, bw, bx, by, bz, n - 1, n, a);
+        if (bv == 0 && bw == 0 && bx == 0 && by == 0 && bz == 1)
+        {
+            // log this cornercase for verification purposes
+            if (s | cid)
+            {
+                tlv_write(s, cid, TLV_B1, n);
+            }
+            continue; // try another a
+        }
+        break;
+    }
+    T bv2 = bv, bw2 = bw, bx2 = bx, by2 = by, bz2 = bz;
+    exponentiate5<T, TT>(bv2, bw2, bx2, by2, bz2, 2, n, a); // B^2
+    bv = add_mod<T, TT>(bv, bv2, n);
+    bw = add_mod<T, TT>(bw, bw2, n);
+    bx = add_mod<T, TT>(bx, bx2, n);
+    by = add_mod<T, TT>(by, by2, n);
+    bz = add_mod<T, TT>(bz, bz2, n);
+
+    exponentiate5<T, TT>(bv2, bw2, bx2, by2, bz2, 2, n, a); // B^4
+    bv = add_mod<T, TT>(bv, bv2, n);
+    bw = add_mod<T, TT>(bw, bw2, n);
+    bx = add_mod<T, TT>(bx, bx2, n);
+    by = add_mod<T, TT>(by, by2, n);
+    bz = add_mod<T, TT>(bz, bz2, n);
+
+    bv2 = bv, bw2 = bw, bx2 = bx, by2 = by, bz2 = bz;
+    exponentiate5<T, TT>(bv2, bw2, bx2, by2, bz2, 3, n, a); // B^3
+    bv = add_mod<T, TT>(bv, bv2, n);
+    bw = add_mod<T, TT>(bw, bw2, n);
+    bx = add_mod<T, TT>(bx, bx2, n);
+    by = add_mod<T, TT>(by, by2, n);
+    bz = add_mod<T, TT>(bz, bz2, n);
+
+    bz = add_mod<T, TT>(bz, 1, n);
+
+    if (bv != n - 1 || bw != 1 || bx != n - 1 || by != 1 || bz != a)
+        return false; // composite
+    return true;      // might be prime
+}
+
+int inner_loop(int s, uint16_t cid, uint128_t seed, uint64_t count)
 {
     bool r, rl;
     uint128_t v = 0;
@@ -496,8 +818,15 @@ template <class T, class TT> static int loop(int s, uint16_t cid, const TT &seed
     {
         v = u.get_seed(1);
         v = convert_seed_to_number(v);
-        r = isprime<T, TT>(v);
-        rl = islnrcprime<T, TT>(v, s, cid);
+        if (v >> 61)
+        {
+            assert(0);
+        }
+        else
+        {
+            r = isprime<uint64_t, uint128_t>(v);
+            rl = islnrc3prime<uint64_t, uint128_t>(v, s, cid);
+        }
         if (r)
         {
             if (!rl)
@@ -522,16 +851,11 @@ template <class T, class TT> static int loop(int s, uint16_t cid, const TT &seed
     return 0;
 }
 
-int inner_loop(int s, uint16_t cid, uint128_t seed, uint64_t count)
-{
-    return loop<uint64_t, uint128_t>(s, cid, seed, count);
-    // return loop < uint128_t, uint256_t > (s, cid, start, end);
-}
-
 static int inner_self_test_64(void)
 {
     uint64_t s, r, t;
     bool b;
+
     printf("Perfect cube ...\n");
     b = is_perfect_cube<uint64_t, uint128_t>(6);
     if (b)
@@ -551,6 +875,27 @@ static int inner_self_test_64(void)
     b = is_perfect_cube<uint64_t, uint128_t>(0x1003003002);
     if (b)
         return -1;
+
+    printf("Perfect sursolid ...\n");
+    b = is_perfect_sursolid<uint64_t, uint128_t>(6);
+    if (b)
+        return -1;
+    b = is_perfect_sursolid<uint64_t, uint128_t>(64 * 16);
+    if (!b)
+        return -1;
+    b = is_perfect_sursolid<uint64_t, uint128_t>(81);
+    if (b)
+        return -1;
+    b = is_perfect_sursolid<uint64_t, uint128_t>(0x100500A00A005001ull);
+    if (!b)
+        return -1;
+    b = is_perfect_sursolid<uint64_t, uint128_t>(0x100500A00A005000ull);
+    if (b)
+        return -1;
+    b = is_perfect_sursolid<uint64_t, uint128_t>(0x100500A00A005002ull);
+    if (b)
+        return -1;
+
     printf("Gcd ...\n");
     s = 12;
     t = 15;
@@ -562,10 +907,29 @@ static int inner_self_test_64(void)
     r = gcd<uint64_t>(s, t);
     if (r != 6)
         return -1;
+
+    printf("Modinv ...\n");
+    s = 11;
+    t = 15;
+    r = modinv<uint64_t, uint128_t>(s, t);
+    if (r != 11)
+        return -1;
+    s = 12;
+    t = 31;
+    r = modinv<uint64_t, uint128_t>(s, t);
+    if (r != 13)
+        return -1;
+    s = 1234567;
+    t = 87654321;
+    r = modinv<uint64_t, uint128_t>(s, t);
+    if (r != 75327931)
+        return -1;
+
     printf("Power ...\n");
     r = power<uint64_t, uint128_t>(3, 0xaa55, 197);
     if (r != 0xa7)
         return -1;
+
     printf("Known primes ...\n");
     b = isprime<uint64_t, uint128_t>(200003ull);
     if (!b)
@@ -604,6 +968,88 @@ static int inner_self_test_64(void)
         return (-1);
     }
 
+    printf("Linear recurrence second order ...\n");
+    if (1)
+    {
+        uint64_t s, t;
+        s = 1;
+        t = 2;
+        exponentiate2<uint64_t, uint128_t>(s, t, 2, 101, 13);
+        if (s != 4 || t != 17)
+        {
+            printf("linear recurrence 2 failed _2_\n");
+            return (-1);
+        }
+        s = 1;
+        t = 2;
+        exponentiate2<uint64_t, uint128_t>(s, t, 4, 101, 13);
+        if (s != 35 || t != 93)
+        {
+            printf("linear recurrence 2 failed _4_\n");
+            return (-1);
+        }
+        s = 1;
+        t = 2;
+        exponentiate2<uint64_t, uint128_t>(s, t, 3, 101, 13);
+	printf("%lu %lu\n", s, t);
+        if (s != 25 || t != 86)
+        {
+            printf("linear recurrence 2 failed _3_\n");
+            return (-1);
+        }
+        s = 1;
+        t = 2;
+        exponentiate2<uint64_t, uint128_t>(s, t, 5, 101, 13);
+	printf("%lu %lu\n", s, t);
+        if (s != 62 || t != 35)
+        {
+            printf("linear recurrence 2 failed _5_\n");
+            return (-1);
+        }
+    }
+    printf("Linear recurrence third order ...\n");
+    if (1)
+    {
+        uint64_t s, t, u;
+        s = 1;
+        t = 2;
+        u = 3;
+        exponentiate3<uint64_t, uint128_t>(s, t, u, 2, 101, 13);
+        if (s != 23 || t != 77 || u != 61)
+        {
+            printf("linear recurrence 3 failed _2_\n");
+            return (-1);
+        }
+        s = 1;
+        t = 2;
+        u = 3;
+        exponentiate3<uint64_t, uint128_t>(s, t, u, 4, 101, 13);
+        if (s != 58 || t != 0 || u != 75)
+        {
+            printf("linear recurrence 3 failed _4_\n");
+            return (-1);
+        }
+        s = 0;
+        t = 1;
+        u = 0;
+        exponentiate3<uint64_t, uint128_t>(s, t, u, 3, 101, 13);
+        if (s != 0 || t != 13 || u != 13)
+        {
+            printf("linear recurrence 3 failed _3_\n");
+            return (-1);
+        }
+        s = 0;
+        t = 1;
+        u = 0;
+        exponentiate3<uint64_t, uint128_t>(s, t, u, 5, 101, 13);
+        // printf("%lu %lu %lu\n", s, t, u);
+        if (s != 13 || t != 68 || u != 68)
+        {
+            printf("linear recurrence 3 failed _5_\n");
+            return (-1);
+        }
+    }
+
     printf("Isprime ...\n");
     t = 1;
     t <<= 3;
@@ -614,10 +1060,56 @@ static int inner_self_test_64(void)
         printf("isprime M(3) failed\n");
         return -1;
     }
-    b = islnrcprime<uint64_t, uint128_t>(t);
+    b = islnrc3prime<uint64_t, uint128_t>(t);
     if (!b)
     {
-        printf("islnrc M(3) failed\n");
+        printf("islnrc3 M(3) failed\n");
+        return -1;
+    }
+    b = islnrc5prime<uint64_t, uint128_t>(t);
+    if (!b)
+    {
+        printf("islnrc5 M(3) failed\n");
+        return -1;
+    }
+
+    t = 101;
+    b = isprime<uint64_t, uint128_t>(t);
+    if (!b)
+    {
+        printf("isprime 101 failed\n");
+        return -1;
+    }
+    b = islnrc3prime<uint64_t, uint128_t>(t);
+    if (!b)
+    {
+        printf("islnrc3 101 failed\n");
+        return -1;
+    }
+    b = islnrc5prime<uint64_t, uint128_t>(t);
+    if (!b)
+    {
+        printf("islnrc5 101 failed\n");
+        return -1;
+    }
+
+    t = 4493;
+    b = isprime<uint64_t, uint128_t>(t);
+    if (!b)
+    {
+        printf("isprime 4493 failed\n");
+        return -1;
+    }
+    b = islnrc3prime<uint64_t, uint128_t>(t);
+    if (!b)
+    {
+        printf("islnrc3 4493 failed\n");
+        return -1;
+    }
+    b = islnrc5prime<uint64_t, uint128_t>(t);
+    if (!b)
+    {
+        printf("islnrc5 4493 failed\n");
         return -1;
     }
 
@@ -630,10 +1122,16 @@ static int inner_self_test_64(void)
         printf("isprime M(31) failed\n");
         return -1;
     }
-    b = islnrcprime<uint64_t, uint128_t>(t);
+    b = islnrc3prime<uint64_t, uint128_t>(t);
     if (!b)
     {
-        printf("islnrc M(31) failed\n");
+        printf("islnrc3 M(31) failed\n");
+        return -1;
+    }
+    b = islnrc5prime<uint64_t, uint128_t>(t);
+    if (!b)
+    {
+        printf("islnrc5 M(31) failed\n");
         return -1;
     }
 
@@ -646,10 +1144,10 @@ static int inner_self_test_64(void)
         printf("isprime M(61) failed\n");
         return -1;
     }
-    b = islnrcprime<uint64_t, uint128_t>(t);
+    b = islnrc3prime<uint64_t, uint128_t>(t);
     if (!b)
     {
-        printf("islnrc M(61) failed\n");
+        printf("islnrc3 M(61) failed\n");
         return -1;
     }
 
