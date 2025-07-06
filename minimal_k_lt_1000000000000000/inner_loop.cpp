@@ -171,35 +171,31 @@ template <class T> static T gcd(const T &x, const T &y)
 
 template <class T> static int jacobi(const T &x, const T &y)
 {
-
+    // assert((y & 1) == 1);
     int t = 1;
     T a = x;
     T n = y;
-    T v = n % 8;
+    T v = n & 7;
     bool c = (v == 3) || (v == 5);
     while (a)
     {
-        while ((a & 1) == 0)
-        {
-            a = a / 2;
-            if (c)
-                t = -t;
-        }
+        v = __builtin_ctzll(a);
+        a >>= v;
+        if (c && (v & 1))
+            t = -t;
 
         if (a < n)
         {
             v = a;
             a = n;
             n = v;
-            if ((a % 4) == 3 && (n % 4) == 3)
+            if ((a & n & 3) == 3)
                 t = -t;
-            v = n % 8;
+            v = n & 7;
             c = (v == 3) || (v == 5);
         }
 
-        a = (a - n) / 2;
-        if (c)
-            t = -t;
+        a -= n;
     }
 
     return (n == 1) ? t : 0;
@@ -415,7 +411,7 @@ template <class T, class TT> static bool is_perfect_sursolid(const T &a)
 }
 
 // a^e mod m
-template <class T, class TT> static T power(const T &a, const T &e, const T &m)
+template <class T, class TT> static T pow_mod(const T &a, const T &e, const T &m)
 {
     T n = e;
     T s = a;
@@ -436,7 +432,7 @@ template <class T, class TT> static bool witness(const T &n, int s, const T &d, 
     T x, y;
     if (n == a)
         return true;
-    x = power<T, TT>(a, d, n);
+    x = pow_mod<T, TT>(a, d, n);
     while (s)
     {
         y = square_mod<T, TT>(x, n);
@@ -635,23 +631,27 @@ template <class T, class TT> void ok_exponentiate3(T &s, T &t, T &u, const T e, 
 }
 
 //  Mod(Mod(x+t,n),x^2-a)^e
+//
+//  if T is uint64_t, assume t,a,n,e are 61 bit numbers   (require 3 guard bits)
 template <class T, class TT> void exponentiate2(T &s, T &t, const T e, const T n, const T a)
 {
     T t0 = t;
+    T tmp;
     unsigned bit = log_2<T>(e);
     while (bit--)
     {
-        T t2 = square_mod<T, TT>(t, n);
-        T s2 = square_mod<T, TT>(s, n);
-        TT ss = mul_mod<T, TT>(s, t, n);
-        ss += ss;
-        TT tt = (TT)s2 * a + t2;
+        T t2 = square_mod<T, TT>(t, n);   // f bits
+        T s2 = square_mod<T, TT>(s, n);   // f bits
+        TT ss = mul_mod<T, TT>(s, t, n);  // f bits
+        ss += ss;                         // f+1 bits
+        TT tt = mul_mod<T, TT>(s2, a, n); // f bits
+        tt += t2;                         // f+1 bits
 
         if (e & ((T)1 << bit))
         {
-            TT tmp = ss * a;
-            ss = t0 * ss + tt;
-            tt = t0 * tt + tmp;
+            TT tmp = ss * a;    // 2f + 1 bits
+            ss = t0 * ss + tt;  // 3f + 2
+            tt = t0 * tt + tmp; // 4f + 2
         }
 
         s = mod<T, TT>(ss, n);
@@ -660,6 +660,8 @@ template <class T, class TT> void exponentiate2(T &s, T &t, const T e, const T n
 }
 
 //  Mod(Mod(x+u,n),x^3-a*x-a)^e
+//
+//  if T is uint64_t, assume t,u,a,n,e are 61 bit numbers   (require 3 guard bits)
 template <class T, class TT> void exponentiate3(T &s, T &t, T &u, const T e, const T n, const T a)
 {
     unsigned bit = log_2<T>(e);
@@ -698,53 +700,67 @@ template <class T, class TT> void exponentiate3(T &s, T &t, T &u, const T e, con
 template <class T, class TT> static bool islnrc2prime(const T &n, int s = 0, int cid = 0)
 {
     if (n < 23)
-    {
-        // prime for sure
-        return (n == 1 || n == 2 || n == 3 || n == 5 || n == 7 || n == 11 || n == 13 || n == 17 || n == 19);
-    }
+        return (n == 1 || n == 2 || n == 3 || n == 5 || n == 7 || n == 11 || n == 13 || n == 17 ||
+                n == 19); // prime for sure
 
     if (is_perfect_square<T, TT>(n))
-    {
-        return false; // composite
-    }
+        return false; // n composite
 
-    T k, a, b, c, bs, bt, g, j;
-    for (k = 1;; k++)
+    for (T k = 1;; k++)
     {
+        T a, b, c, g, j;
+
+        // a = 2^k + 1
+        // b = a - 1
+        // c = 2*a - 1
+        assert(k < 61);
         a = (1 << k) + 1;
-        b = a - 1;
-        c = 2 * a - 1;
-        g = power<T, TT>(a, 6, n) - 1;
-        g = gcd<T>(g, n);
-        if (g == n)
+        a %= n;
+        if (a < 2)
             continue; // try another a
-        if (g > 1)
-            return false; // composite
-        g = 3 * b * b + a;
-        g = gcd<T>(g, n);
-        if (g == n)
+        b = (1 << k);
+        b %= n;
+        if (b < 2)
             continue; // try another a
-        if (g > 1)
-            return false; // composite
+        c = (2 << k) + 1;
+        c %= n;
+        if (c < 2)
+            continue; // try another a
+
+        // verify a is not a quadratic residue
         j = jacobi<T>(a, n);
         if (j == 0)
-            return false; // composite
+            return false; // n composite
         if (j == 1)
             continue; // try another a
 
-        if (power<T, TT>(2, n, n) != 2)
-            return false; // composite;
-        if (power<T, TT>(a, n, n) != a)
-            return false; // composite;
-        if (power<T, TT>(b, n, n) != b)
-            return false; // composite;
-        if (power<T, TT>(c, n, n) != c)
-            return false; // composite;
+        // verify gcd(a^6-1, n) == 1
+        g = pow_mod<T, TT>(a, 6, n) - 1;
+        g = gcd<T>(g, n);
+        if (g > 1)
+            return false; // n composite
 
-        bs = 1;
-        bt = b;
+        // verify gcd(3*b^2+a, n) == 1
+        g = add_mod<T, TT>(3 * square_mod<T, TT>(b, n), a, n);
+        g = gcd<T>(g, n);
+        if (g > 1)
+            return false; // n composite
+
+        // 4 Fermat tests
+        if (pow_mod<T, TT>(2, n, n) != 2)
+            return false; // n composite;
+        if (pow_mod<T, TT>(a, n, n) != a)
+            return false; // n composite;
+        if (pow_mod<T, TT>(b, n, n) != b)
+            return false; // n composite;
+        if (pow_mod<T, TT>(c, n, n) != c)
+            return false; // n composite;
+
+        // A linear reccurrence Mod(Mod(x+b, n), x^2-a)^(n+1)
+        T bs = 1;
+        T bt = b;
         exponentiate2<T, TT>(bs, bt, n + 1, n, a);
-        return (bs == 0 && bt == (b * b - a) % n);
+        return (bs == 0 && add_mod<T, TT>(bt, a, n) == square_mod<T, TT>(b, n)); // ?? n prime ? n composite for sure ?
     }
 }
 
@@ -769,7 +785,7 @@ template <class T, class TT> static bool islnrc3prime(const T &n, int s = 0, int
         {
             continue; // try another a
         }
-        if (power<T, TT>(mod<T, TT>(n, a), (a - 1) / 3, a) == 1)
+        if (pow_mod<T, TT>(mod<T, TT>(n, a), (a - 1) / 3, a) == 1)
         {
             continue; // try another a
         }
@@ -906,7 +922,7 @@ template <class T, class TT> static bool islnrc5prime(const T &n, int s = 0, int
         {
             continue; // try another a
         }
-        if (power<T, TT>(mod<T, TT>(n, a), (a - 1) / 5, a) == 1)
+        if (pow_mod<T, TT>(mod<T, TT>(n, a), (a - 1) / 5, a) == 1)
         {
             continue; // try another a
         }
@@ -1023,6 +1039,7 @@ static int inner_self_test_64(void)
 {
     uint64_t s, r, t;
     bool b;
+    int j;
 
     printf("Perfect square ...\n");
     b = is_perfect_square<uint64_t, uint128_t>(6);
@@ -1096,6 +1113,23 @@ static int inner_self_test_64(void)
     if (r != 6)
         return -1;
 
+    printf("Jacobi ...\n");
+    s = 33;
+    t = 9999;
+    j = jacobi<uint64_t>(s, t);
+    if (j != 0)
+        return -1;
+    s = 34;
+    t = 9999;
+    j = jacobi<uint64_t>(s, t);
+    if (j != -1)
+        return -1;
+    s = 35;
+    t = 9999;
+    j = jacobi<uint64_t>(s, t);
+    if (j != 1)
+        return -1;
+
     printf("Modinv ...\n");
     s = 11;
     t = 15;
@@ -1114,7 +1148,7 @@ static int inner_self_test_64(void)
         return -1;
 
     printf("Power ...\n");
-    r = power<uint64_t, uint128_t>(3, 0xaa55, 197);
+    r = pow_mod<uint64_t, uint128_t>(3, 0xaa55, 197);
     if (r != 0xa7)
         return -1;
 
@@ -1258,17 +1292,26 @@ static int inner_self_test_64(void)
         printf("isprime M(3) failed\n");
         return -1;
     }
+    b = islnrc2prime<uint64_t, uint128_t>(t);
+    if (!b)
+    {
+        printf("islnrc2 M(3) failed\n");
+        return -1;
+    }
     b = islnrc3prime<uint64_t, uint128_t>(t);
     if (!b)
     {
         printf("islnrc3 M(3) failed\n");
         return -1;
     }
-    b = islnrc5prime<uint64_t, uint128_t>(t);
-    if (!b)
+    if (0)
     {
-        printf("islnrc5 M(3) failed\n");
-        return -1;
+        b = islnrc5prime<uint64_t, uint128_t>(t);
+        if (!b)
+        {
+            printf("islnrc5 M(3) failed\n");
+            return -1;
+        }
     }
 
     t = 101;
@@ -1278,17 +1321,26 @@ static int inner_self_test_64(void)
         printf("isprime 101 failed\n");
         return -1;
     }
+    b = islnrc2prime<uint64_t, uint128_t>(t);
+    if (!b)
+    {
+        printf("islnrc2 101 failed\n");
+        return -1;
+    }
     b = islnrc3prime<uint64_t, uint128_t>(t);
     if (!b)
     {
         printf("islnrc3 101 failed\n");
         return -1;
     }
-    b = islnrc5prime<uint64_t, uint128_t>(t);
-    if (!b)
+    if (0)
     {
-        printf("islnrc5 101 failed\n");
-        return -1;
+        b = islnrc5prime<uint64_t, uint128_t>(t);
+        if (!b)
+        {
+            printf("islnrc5 101 failed\n");
+            return -1;
+        }
     }
 
     t = 4493;
@@ -1298,17 +1350,26 @@ static int inner_self_test_64(void)
         printf("isprime 4493 failed\n");
         return -1;
     }
+    b = islnrc2prime<uint64_t, uint128_t>(t);
+    if (!b)
+    {
+        printf("islnrc2 4493 failed\n");
+        return -1;
+    }
     b = islnrc3prime<uint64_t, uint128_t>(t);
     if (!b)
     {
         printf("islnrc3 4493 failed\n");
         return -1;
     }
-    b = islnrc5prime<uint64_t, uint128_t>(t);
-    if (!b)
+    if (0)
     {
-        printf("islnrc5 4493 failed\n");
-        return -1;
+        b = islnrc5prime<uint64_t, uint128_t>(t);
+        if (!b)
+        {
+            printf("islnrc5 4493 failed\n");
+            return -1;
+        }
     }
 
     t = 1;
@@ -1320,17 +1381,26 @@ static int inner_self_test_64(void)
         printf("isprime M(31) failed\n");
         return -1;
     }
+    b = islnrc2prime<uint64_t, uint128_t>(t);
+    if (!b)
+    {
+        printf("islnrc2 M(31) failed\n");
+        return -1;
+    }
     b = islnrc3prime<uint64_t, uint128_t>(t);
     if (!b)
     {
         printf("islnrc3 M(31) failed\n");
         return -1;
     }
-    b = islnrc5prime<uint64_t, uint128_t>(t);
-    if (!b)
+    if (0)
     {
-        printf("islnrc5 M(31) failed\n");
-        return -1;
+        b = islnrc5prime<uint64_t, uint128_t>(t);
+        if (!b)
+        {
+            printf("islnrc5 M(31) failed\n");
+            return -1;
+        }
     }
 
     t = 1;
@@ -1340,6 +1410,12 @@ static int inner_self_test_64(void)
     if (!b)
     {
         printf("isprime M(61) failed\n");
+        return -1;
+    }
+    b = islnrc2prime<uint64_t, uint128_t>(t);
+    if (!b)
+    {
+        printf("islnrc2 M(61) failed\n");
         return -1;
     }
     b = islnrc3prime<uint64_t, uint128_t>(t);

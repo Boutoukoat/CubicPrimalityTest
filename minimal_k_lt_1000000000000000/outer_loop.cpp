@@ -569,7 +569,7 @@ int main(int argc, char **argv)
         {
             scan128(argv[++i], &done_count);
             lll.set_seed(INIT_SEED);
-            lll.get_seed(done_count);
+            lll.get_seed(convert_number_to_seed(done_count));
             continue;
         }
         if (!strcmp(argv[i], "-server"))
