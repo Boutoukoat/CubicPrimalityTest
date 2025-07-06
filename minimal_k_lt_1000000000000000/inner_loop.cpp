@@ -169,6 +169,7 @@ template <class T> static T gcd(const T &x, const T &y)
     }
 }
 
+// jacobi symbol (x, y)
 template <class T> static int jacobi(const T &x, const T &y)
 {
     // assert((y & 1) == 1);
@@ -199,6 +200,13 @@ template <class T> static int jacobi(const T &x, const T &y)
     }
 
     return (n == 1) ? t : 0;
+}
+
+// jacobi symbol (2, y)
+template <class T> static int jacobi2(const T &y)
+{
+    // assert((y & 1) == 1);
+    return ((y & 2) == ((y >> 1) & 2)) ? 1 : -1;
 }
 
 template <class T, class TT> static T mod_inv(const T &x, const T &m)
@@ -697,6 +705,31 @@ template <class T, class TT> void exponentiate3(T &s, T &t, T &u, const T e, con
     }
 }
 
+//  Mod(Mod(x,n),x^2-2*x-1)^e
+//
+//  if T is uint64_t, assume t,a,n,e are 63 bit numbers   (require 1 guard bit)
+template <class T, class TT> void exponentiate_half_a(T &s, T &t, const T e, const T n)
+{
+    unsigned bit = log_2<T>(e);
+
+    while (bit--)
+    {
+         // (s*x+t)^2 = 2*(s+t)*s*x + t^2+s^2
+	 T s2 = square_mod<T, TT>(s, n);
+	 T t2 = square_mod<T, TT>(t, n);
+	 s = mul_mod<T, TT>(s + t, 2 * s, n);
+	 t = add_mod<T, TT>(s2, t2, n);
+
+        if (e & ((T)1 << bit))
+        {
+			// (s*x+t)*x = (2*s+t)*x + s
+			T tmp = s;
+			s = add_mod<T, TT>(s + s, t, n);
+			t = tmp;
+	}
+    }
+}
+
 template <class T, class TT> static bool islnrc2prime(const T &n, int s = 0, int cid = 0)
 {
     if (n < 23)
@@ -706,6 +739,17 @@ template <class T, class TT> static bool islnrc2prime(const T &n, int s = 0, int
     if (is_perfect_square<T, TT>(n))
         return false; // n composite
 
+    if (jacobi2<T>(n) == -1)
+    {
+        if (pow_mod<T, TT>(2, n, n) != 2)
+            return false; // n composite;
+        T bs = 1;
+        T bt = 0;
+	exponentiate_half_a<T, TT>(bs, bt, n + 1, n);
+	return (bs == 0 && bt+1 == n); // ?? n prime ? n composite for sure ?
+    }
+    else
+    {
     for (T k = 1;; k++)
     {
         T a, b, c, g, j;
@@ -713,16 +757,16 @@ template <class T, class TT> static bool islnrc2prime(const T &n, int s = 0, int
         // a = 2^k + 1
         // b = a - 1
         // c = 2*a - 1
+        assert(k < 128);
+        b = pow_mod<T, TT>(2, k, n);
+        if (b < 2)
+            continue; // try another a
         assert(k < 61);
-        a = (1 << k) + 1;
+        a = b + 1;
         a %= n;
         if (a < 2)
             continue; // try another a
-        b = (1 << k);
-        b %= n;
-        if (b < 2)
-            continue; // try another a
-        c = (2 << k) + 1;
+        c = 2*a - 1;
         c %= n;
         if (c < 2)
             continue; // try another a
@@ -761,6 +805,7 @@ template <class T, class TT> static bool islnrc2prime(const T &n, int s = 0, int
         T bt = b;
         exponentiate2<T, TT>(bs, bt, n + 1, n, a);
         return (bs == 0 && add_mod<T, TT>(bt, a, n) == square_mod<T, TT>(b, n)); // ?? n prime ? n composite for sure ?
+    }
     }
 }
 
