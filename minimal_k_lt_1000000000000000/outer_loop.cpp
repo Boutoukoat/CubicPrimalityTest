@@ -112,7 +112,8 @@ static void connections_init(void)
 }
 
 // check if a socket is unexpectedly closed, This can happen from network disruption, tcp timeout
-// Enter reality : the impact of a broken socket can include SIG_PIPE, read return -1, or return 0 and errno is set, or .....
+// Enter reality : the impact of a broken socket can include SIG_PIPE, read return -1, or return 0 and errno is set, or
+// .....
 static bool is_closed_socket(int fd)
 {
     struct pollfd pfd;
@@ -186,10 +187,10 @@ static void set_timeout(void)
 
 static uint64_t get_count_from_rate(uint64_t rate)
 {
-            uint64_t ncount = (BLOCK_TIME + rate - 1) / rate;
-            ncount |= 1;
-            ncount += 3;
-	    return ncount;
+    uint64_t ncount = (BLOCK_TIME + rate - 1) / rate;
+    ncount |= 1;
+    ncount += 3;
+    return ncount;
 }
 
 static void get_next(uint128_t *seed, uint64_t *count, uint64_t rate)
@@ -477,7 +478,7 @@ void *server_thread(void *arg)
                             }
                             get_next(&v_seed, &v_count, connections[cid].rate);
                             current_t = __rdtsc();
-			    current_p = head % MAX_BLOCK;
+                            current_p = head % MAX_BLOCK;
                             progress[current_p].seed = v_seed;
                             progress[current_p].count = v_count;
                             progress[current_p].t_start = current_t;
