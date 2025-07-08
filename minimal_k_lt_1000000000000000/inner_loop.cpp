@@ -708,25 +708,25 @@ template <class T, class TT> void exponentiate3(T &s, T &t, T &u, const T e, con
 //  Mod(Mod(x,n),x^2-2*x-1)^e
 //
 //  if T is uint64_t, assume t,a,n,e are 63 bit numbers   (require 1 guard bit)
-template <class T, class TT> void exponentiate_half_a(T &s, T &t, const T e, const T n)
+template <class T, class TT> void exponentiate_half(T &s, T &t, const T e, const T n)
 {
     unsigned bit = log_2<T>(e);
 
     while (bit--)
     {
-         // (s*x+t)^2 = 2*(s+t)*s*x + t^2+s^2
-	 T s2 = square_mod<T, TT>(s, n);
-	 T t2 = square_mod<T, TT>(t, n);
-	 s = mul_mod<T, TT>(s + t, 2 * s, n);
-	 t = add_mod<T, TT>(s2, t2, n);
+        // (s*x+t)^2 = 2*(s+t)*s*x + t^2+s^2
+        T s2 = square_mod<T, TT>(s, n);
+        T t2 = square_mod<T, TT>(t, n);
+        s = mul_mod<T, TT>(s + t, 2 * s, n);
+        t = add_mod<T, TT>(s2, t2, n);
 
         if (e & ((T)1 << bit))
         {
-			// (s*x+t)*x = (2*s+t)*x + s
-			T tmp = s;
-			s = add_mod<T, TT>(s + s, t, n);
-			t = tmp;
-	}
+            // (s*x+t)*x = (2*s+t)*x + s
+            T tmp = s;
+            s = add_mod<T, TT>(s + s, t, n);
+            t = tmp;
+        }
     }
 }
 
@@ -741,71 +741,96 @@ template <class T, class TT> static bool islnrc2prime(const T &n, int s = 0, int
 
     if (jacobi2<T>(n) == -1)
     {
+        if ((uint64_t)(n * 0xaaaaaaaaaaaaaaabull) <= 0x5555555555555555ull)
+            return false; // divisible by 3
+
+	// 1 Fermat test
         if (pow_mod<T, TT>(2, n, n) != 2)
             return false; // n composite;
         T bs = 1;
         T bt = 0;
-	exponentiate_half_a<T, TT>(bs, bt, n + 1, n);
-	return (bs == 0 && bt+1 == n); // ?? n prime ? n composite for sure ?
+        exponentiate_half<T, TT>(bs, bt, n + 1, n);
+        return (bs == 0 && bt + 1 == n); // ?? n prime ? n composite for sure ?
+    }
+    else if ((n & 3) == 3)
+    {
+        /* a = n-1; b = 2; c = 3; r = 1 */
+
+        if ((uint64_t)(n * 0xaaaaaaaaaaaaaaabull) <= 0x5555555555555555ull)
+            return false; // divisible by 3
+
+	// 2 Fermat tests
+        if (pow_mod<T, TT>(2, n, n) != 2)
+            return false; // n composite;
+        if (pow_mod<T, TT>(3, n, n) != 3)
+            return false; // n composite;
+
+        T bs = 1;
+        T bt = 2;
+        exponentiate2<T, TT>(bs, bt, n + 1, n, n-1);
+        return (bs == 0 && bt == 5); // ?? n prime ? n composite for sure ?
     }
     else
     {
-    for (T k = 1;; k++)
-    {
-        T a, b, c, g, j;
+        for (T k = 1;; k++)
+        {
+            T a, b, c, g, j;
 
-        // a = 2^k + 1
-        // b = a - 1
-        // c = 2*a - 1
-        assert(k < 128);
-        b = pow_mod<T, TT>(2, k, n);
-        if (b < 2)
-            continue; // try another a
-        assert(k < 61);
-        a = b + 1;
-        a %= n;
-        if (a < 2)
-            continue; // try another a
-        c = 2*a - 1;
-        c %= n;
-        if (c < 2)
-            continue; // try another a
+            // a = 2^k + 1
+            // b = a - 1
+            // c = 2*a - 1
+            assert(k < 128);
+            b = pow_mod<T, TT>(2, k, n);
+            if (b < 2 || b == n - 1)
+                continue; // try another a
+            assert(k < 61);
+            a = b + 1;
+            a %= n;
+            if (a < 2 || a == n - 1)
+                continue; // try another a
+            c = 2 * a - 1;
+            c %= n;
+            if (c < 2 || c == n - 1)
+                continue; // try another a
 
-        // verify a is not a quadratic residue
-        j = jacobi<T>(a, n);
-        if (j == 0)
-            return false; // n composite
-        if (j == 1)
-            continue; // try another a
+            // verify a is not a quadratic residue
+            j = jacobi<T>(a, n);
+            if (j == 0)
+                return false; // n composite
+            if (j == 1)
+                continue; // try another a
 
-        // verify gcd(a^6-1, n) == 1
-        g = pow_mod<T, TT>(a, 6, n) - 1;
-        g = gcd<T>(g, n);
-        if (g > 1)
-            return false; // n composite
+            // verify gcd(b*(a^2-b), n) == 1
+            g = mul_mod<T, TT>(a, a, n);
+            g = sub_mod<T>(g, b, n);
+            g = mul_mod<T, TT>(g, b, n);
+            g = gcd<T>(g, n);
+            if (g > 1)
+                return false; // n composite
 
-        // verify gcd(3*b^2+a, n) == 1
-        g = add_mod<T, TT>(3 * square_mod<T, TT>(b, n), a, n);
-        g = gcd<T>(g, n);
-        if (g > 1)
-            return false; // n composite
+            // verify gcd(3*b^2+a, n) == 1
+            g = add_mod<T, TT>(3 * square_mod<T, TT>(b, n), a, n);
+            g = gcd<T>(g, n);
+            if (g > 1)
+                return false; // n composite
 
-        // 4 Fermat tests
-        if (pow_mod<T, TT>(2, n, n) != 2)
-            return false; // n composite;
-        if (pow_mod<T, TT>(a, n, n) != a)
-            return false; // n composite;
-        if (pow_mod<T, TT>(b, n, n) != b)
-            return false; // n composite;
-        if (pow_mod<T, TT>(c, n, n) != c)
-            return false; // n composite;
+            // 4 Fermat tests
+            if (pow_mod<T, TT>(2, n, n) != 2)
+                return false; // n composite;
+            if (pow_mod<T, TT>(a, n, n) != a)
+                return false; // n composite;
+            if (pow_mod<T, TT>(b, n, n) != b)
+                return false; // n composite;
+            if (pow_mod<T, TT>(c, n, n) != c)
+                return false; // n composite;
 
-        // A linear reccurrence Mod(Mod(x+b, n), x^2-a)^(n+1)
-        T bs = 1;
-        T bt = b;
-        exponentiate2<T, TT>(bs, bt, n + 1, n, a);
-        return (bs == 0 && add_mod<T, TT>(bt, a, n) == square_mod<T, TT>(b, n)); // ?? n prime ? n composite for sure ?
-    }
+            // A linear reccurrence Mod(Mod(x+b, n), x^2-a)^(n+1)
+            T bs = 1;
+            T bt = b;
+            exponentiate2<T, TT>(bs, bt, n + 1, n, a);
+            return (bs == 0 &&
+                    add_mod<T, TT>(bt, a, n) == square_mod<T, TT>(b, n)); // ?? n prime ? n composite for sure ?
+        }
     }
 }
 
