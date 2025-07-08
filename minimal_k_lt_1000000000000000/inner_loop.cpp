@@ -658,8 +658,26 @@ template <class T, class TT> void exponentiate2(T &s, T &t, const T e, const T n
         if (e & ((T)1 << bit))
         {
             TT tmp = ss * a;    // 2f + 1 bits
+if (__builtin_constant_p(t0) && t0 == 0)
+{
+            ss = tt;  
+            tt = tmp; 
+}
+else if (__builtin_constant_p(t0) && t0 == 1)
+{
+            ss = ss + tt;  
+            tt = tt + tmp; 
+}
+else if (__builtin_constant_p(t0) && t0 == 2)
+{
+            ss += ss + tt;  
+            tt += tt + tmp; 
+}
+else
+{
             ss = t0 * ss + tt;  // 3f + 2
             tt = t0 * tt + tmp; // 4f + 2
+}
         }
 
         s = mod<T, TT>(ss, n);
@@ -694,9 +712,30 @@ template <class T, class TT> void exponentiate3(T &s, T &t, T &u, const T e, con
         if (e & ((T)1 << bit))
         {
             TT rt2 = q0 * a;
+if (__builtin_constant_p(u0) && u0 == 0)
+{
+            q0 = q1;
+            q1 = q2 + rt2;
+            q2 = rt2;
+}
+else if (__builtin_constant_p(u0) && u0 == 1)
+{
+            q0 = q0 + q1;
+            q1 = q1 + q2 + rt2;
+            q2 = q2 + rt2;
+}
+else if (__builtin_constant_p(u0) && u0 == 2)
+{
+            q0 += q0 + q1;
+            q1 += q1 + q2 + rt2;
+            q2 += q2 + rt2;
+}
+else
+{
             q0 = q0 * u0 + q1;
             q1 = q1 * u0 + q2 + rt2;
             q2 = q2 * u0 + rt2;
+}
         }
 
         s = mod<T, TT>(q0, n);
@@ -1294,6 +1333,14 @@ static int inner_self_test_64(void)
         if (s != 62 || t != 35)
         {
             printf("linear recurrence 2 failed _5_\n");
+            return (-1);
+        }
+        s = 1;
+        t = 0;
+        exponentiate2<uint64_t, uint128_t>(s, t, 12, 101, 13);
+        if (s != 0 || t != 19)
+        {
+            printf("linear recurrence 2 failed _12_\n");
             return (-1);
         }
     }
