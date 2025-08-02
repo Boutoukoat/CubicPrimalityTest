@@ -112,6 +112,21 @@ template <class T, class TT> static T add_mod(const T &u, const T &v, const T &q
     return (T)r;
 }
 
+template <class T, class TT> static T div2_mod(const T &u, const T &q)
+{
+    if (u & 1)
+    {
+        TT tu = u;
+        tu += q;
+        tu >>= 1;
+        return (T)tu;
+    }
+    else
+    {
+        return u >> 1;
+    }
+}
+
 template <class T, class TT> static T mod(const TT &u, const T &q)
 {
     TT r = u;
@@ -172,41 +187,141 @@ template <class T> static T gcd(const T &x, const T &y)
 // jacobi symbol (x, y)
 template <class T> static int jacobi(const T &x, const T &y)
 {
+    // assert((x & 1) == 0);
     // assert((y & 1) == 1);
-    int t = 1;
+    if (__builtin_constant_p(x) && x == 2)
+    {
+        return ((y + 2) & 4) ? -1 : 1;
+    }
+    else
+    {
+        int t = 1;
+        T a = x;
+        T n = y;
+        unsigned v = n & 7;
+        unsigned c = (v == 3) || (v == 5);
+        while (a)
+        {
+            v = __builtin_ctzll(a);
+            a >>= v;
+            t = (c & (v & 1)) ? -t : t;
+
+            if (a < n)
+            {
+                T tmp = a;
+                a = n;
+                n = tmp;
+                t = ((a & n & 3) == 3) ? -t : t;
+                v = n & 7;
+                c = (v == 3) || (v == 5);
+            }
+
+            a -= n;
+        }
+
+        return (n == 1) ? t : 0;
+    }
+}
+
+template <class T> static int kronecker(const T &x, const T &y)
+{
+    unsigned x1 = x & 1;
+    unsigned y1 = y & 1;
+    if (y1 == 1)
+    {
+        // bit wizardry for K(+/- 2,n), K(+/- 3,n) when n odd
+        static int table3[12] = {0, 1, 0, 0, 0, -1, 0, -1, 0, 0, 0, 1};
+
+        if (x == 2)
+        {
+            return ((y + 2) & 4) ? -1 : 1;
+        }
+        if (x == -2)
+        {
+            return (y & 4) ? -1 : 1;
+        }
+        if (x == 3)
+        {
+            return table3[y % 12];
+        }
+        if (x == -3)
+        {
+            return (y & 2) ? -table3[y % 12] : table3[y % 12];
+        }
+    }
+    else
+    {
+        // bit wizardry when n even
+        if ((x1 == 0 && y1 == 0) || (y == 0 && !(x == 1 || x == -1)))
+        {
+            return 0;
+        }
+        else if (y == 0)
+        {
+            return 1;
+        }
+    }
+
+    // generic case
     T a = x;
     T n = y;
-    T v = n & 7;
-    bool c = (v == 3) || (v == 5);
-    while (a)
+    T a0 = a;
+    unsigned v, cn, ca;
+    int t = 1;
+    if (a < 0)
+    {
+        if (n < 0)
+        {
+            n = -n;
+            a = -a;
+            t = -t;
+        }
+        else
+        {
+            a = -a;
+        }
+    }
+    else if (n < 0)
+    {
+        n = -n;
+    }
+    // gulp trailing zeroes from n
+    v = a & 7;
+    ca = (v == 3) || (v == 5);
+    v = __builtin_ctzll(n);
+    n >>= v;
+    t = (ca & (v & 1)) ? -t : t;
+
+    if (a0 < 0 && (n & 3) == 3)
+    {
+        t = -t;
+    }
+    v = n & 7;
+    cn = (v == 3) || (v == 5);
+
+    // gulp trailing zeroes from a and apply Stein's algprithm.
+    while (a > 0)
     {
         v = __builtin_ctzll(a);
         a >>= v;
-        if (c && (v & 1))
-            t = -t;
-
+        t = (cn & (v & 1)) ? -t : t;
+        if (a == 1)
+        {
+            n = 1;
+            break;
+        }
         if (a < n)
         {
-            v = a;
+            T r = a;
             a = n;
-            n = v;
-            if ((a & n & 3) == 3)
-                t = -t;
+            n = r;
+            t = ((a & n & 3) == 3) ? -t : t;
             v = n & 7;
-            c = (v == 3) || (v == 5);
+            cn = (v == 3) || (v == 5);
         }
-
-        a -= n;
+        a = a - n;
     }
-
     return (n == 1) ? t : 0;
-}
-
-// jacobi symbol (2, y)
-template <class T> static int jacobi2(const T &y)
-{
-    // assert((y & 1) == 1);
-    return ((y & 2) == ((y >> 1) & 2)) ? 1 : -1;
 }
 
 template <class T, class TT> static T mod_inv(const T &x, const T &m)
@@ -222,17 +337,7 @@ template <class T, class TT> static T mod_inv(const T &x, const T &m)
         a >>= ta;
         while (ta--)
         {
-            if (u & 1)
-            {
-                TT tu = u;
-                tu += m;
-                tu >>= 1;
-                u = (T)tu;
-            }
-            else
-            {
-                u >>= 1;
-            }
+            u = div2_mod<T, TT>(u, m);
         }
         if (a < b)
         {
@@ -657,27 +762,27 @@ template <class T, class TT> void exponentiate2(T &s, T &t, const T e, const T n
 
         if (e & ((T)1 << bit))
         {
-            TT tmp = ss * a;    // 2f + 1 bits
-if (__builtin_constant_p(t0) && t0 == 0)
-{
-            ss = tt;  
-            tt = tmp; 
-}
-else if (__builtin_constant_p(t0) && t0 == 1)
-{
-            ss = ss + tt;  
-            tt = tt + tmp; 
-}
-else if (__builtin_constant_p(t0) && t0 == 2)
-{
-            ss += ss + tt;  
-            tt += tt + tmp; 
-}
-else
-{
-            ss = t0 * ss + tt;  // 3f + 2
-            tt = t0 * tt + tmp; // 4f + 2
-}
+            TT tmp = ss * a; // 2f + 1 bits
+            if (__builtin_constant_p(t0) && t0 == 0)
+            {
+                ss = tt;
+                tt = tmp;
+            }
+            else if (__builtin_constant_p(t0) && t0 == 1)
+            {
+                ss = ss + tt;
+                tt = tt + tmp;
+            }
+            else if (__builtin_constant_p(t0) && t0 == 2)
+            {
+                ss += ss + tt;
+                tt += tt + tmp;
+            }
+            else
+            {
+                ss = t0 * ss + tt;  // 3f + 2
+                tt = t0 * tt + tmp; // 4f + 2
+            }
         }
 
         s = mod<T, TT>(ss, n);
@@ -712,30 +817,30 @@ template <class T, class TT> void exponentiate3(T &s, T &t, T &u, const T e, con
         if (e & ((T)1 << bit))
         {
             TT rt2 = q0 * a;
-if (__builtin_constant_p(u0) && u0 == 0)
-{
-            q0 = q1;
-            q1 = q2 + rt2;
-            q2 = rt2;
-}
-else if (__builtin_constant_p(u0) && u0 == 1)
-{
-            q0 = q0 + q1;
-            q1 = q1 + q2 + rt2;
-            q2 = q2 + rt2;
-}
-else if (__builtin_constant_p(u0) && u0 == 2)
-{
-            q0 += q0 + q1;
-            q1 += q1 + q2 + rt2;
-            q2 += q2 + rt2;
-}
-else
-{
-            q0 = q0 * u0 + q1;
-            q1 = q1 * u0 + q2 + rt2;
-            q2 = q2 * u0 + rt2;
-}
+            if (__builtin_constant_p(u0) && u0 == 0)
+            {
+                q0 = q1;
+                q1 = q2 + rt2;
+                q2 = rt2;
+            }
+            else if (__builtin_constant_p(u0) && u0 == 1)
+            {
+                q0 = q0 + q1;
+                q1 = q1 + q2 + rt2;
+                q2 = q2 + rt2;
+            }
+            else if (__builtin_constant_p(u0) && u0 == 2)
+            {
+                q0 += q0 + q1;
+                q1 += q1 + q2 + rt2;
+                q2 += q2 + rt2;
+            }
+            else
+            {
+                q0 = q0 * u0 + q1;
+                q1 = q1 * u0 + q2 + rt2;
+                q2 = q2 * u0 + rt2;
+            }
         }
 
         s = mod<T, TT>(q0, n);
@@ -778,12 +883,12 @@ template <class T, class TT> static bool islnrc2prime(const T &n, int s = 0, int
     if (is_perfect_square<T, TT>(n))
         return false; // n composite
 
-    if (jacobi2<T>(n) == -1)
+    if (jacobi<T>(2, n) == -1)
     {
         if ((uint64_t)(n * 0xaaaaaaaaaaaaaaabull) <= 0x5555555555555555ull)
             return false; // divisible by 3
 
-	// 1 Fermat test
+        // 1 Fermat test
         if (pow_mod<T, TT>(2, n, n) != 2)
             return false; // n composite;
         T bs = 1;
@@ -797,8 +902,10 @@ template <class T, class TT> static bool islnrc2prime(const T &n, int s = 0, int
 
         if ((uint64_t)(n * 0xaaaaaaaaaaaaaaabull) <= 0x5555555555555555ull)
             return false; // divisible by 3
+        if ((uint64_t)(n * 0x2e8ba2e8ba2e8ba3ull) <= 0x1745d1745d1745d1ull)
+            return false; // divisible by 11
 
-	// 2 Fermat tests
+        // 2 Fermat tests
         if (pow_mod<T, TT>(2, n, n) != 2)
             return false; // n composite;
         if (pow_mod<T, TT>(3, n, n) != 3)
@@ -806,7 +913,7 @@ template <class T, class TT> static bool islnrc2prime(const T &n, int s = 0, int
 
         T bs = 1;
         T bt = 2;
-        exponentiate2<T, TT>(bs, bt, n + 1, n, n-1);
+        exponentiate2<T, TT>(bs, bt, n + 1, n, n - 1);
         return (bs == 0 && bt == 5); // ?? n prime ? n composite for sure ?
     }
     else
@@ -839,10 +946,9 @@ template <class T, class TT> static bool islnrc2prime(const T &n, int s = 0, int
             if (j == 1)
                 continue; // try another a
 
-            // verify gcd(b*(a^2-b), n) == 1
-            g = mul_mod<T, TT>(a, a, n);
-            g = sub_mod<T>(g, b, n);
-            g = mul_mod<T, TT>(g, b, n);
+            // verify gcd(b^2+a, n) == 1
+            g = mul_mod<T, TT>(b, b, n);
+            g = add_mod<T, TT>(g, a, n);
             g = gcd<T>(g, n);
             if (g > 1)
                 return false; // n composite
@@ -853,12 +959,23 @@ template <class T, class TT> static bool islnrc2prime(const T &n, int s = 0, int
             if (g > 1)
                 return false; // n composite
 
+#if 0
+	    static T kmax = 0;
+	    if (k > kmax)
+	    {
+		    kmax = k;
+		    printf("%lu %lu\n", k, n);
+	            if (s | cid)
+        	    {
+                	tlv_write(s, cid, TLV_B1, n);
+	            }
+	    }
+#endif
+
             // 4 Fermat tests
             if (pow_mod<T, TT>(2, n, n) != 2)
                 return false; // n composite;
             if (pow_mod<T, TT>(a, n, n) != a)
-                return false; // n composite;
-            if (pow_mod<T, TT>(b, n, n) != b)
                 return false; // n composite;
             if (pow_mod<T, TT>(c, n, n) != c)
                 return false; // n composite;
@@ -1237,6 +1354,122 @@ static int inner_self_test_64(void)
     t = 9999;
     j = jacobi<uint64_t>(s, t);
     if (j != 1)
+        return -1;
+
+    printf("Kronecker ...\n");
+    s = 33;
+    t = 9999;
+    j = kronecker<int64_t>(s, t);
+    if (j != 0)
+        return -1;
+    s = 34;
+    t = 9999;
+    j = kronecker<int64_t>(s, t);
+    if (j != -1)
+        return -1;
+    s = 35;
+    t = 9999;
+    j = kronecker<int64_t>(s, t);
+    if (j != 1)
+        return -1;
+    j = kronecker<int64_t>(11, 101);
+    if (j != -1)
+        return -1;
+    j = kronecker<int64_t>(-11, 101);
+    if (j != -1)
+        return -1;
+    j = kronecker<int64_t>(13, 101);
+    if (j != 1)
+        return -1;
+    j = kronecker<int64_t>(-13, 101);
+    if (j != 1)
+        return -1;
+    j = kronecker<int64_t>(-1, 101);
+    if (j != 1)
+        return -1;
+    j = kronecker<int64_t>(0, 101);
+    if (j != 0)
+        return -1;
+    j = kronecker<int64_t>(1, 101);
+    if (j != 1)
+        return -1;
+    j = kronecker<int64_t>(1, 0);
+    if (j != 1)
+        return -1;
+    j = kronecker<int64_t>(2, 0);
+    if (j != 0)
+        return -1;
+    j = kronecker<int64_t>(13, -101);
+    if (j != 1)
+        return -1;
+    j = kronecker<int64_t>(-13, -101);
+    if (j != -1)
+        return -1;
+    j = kronecker<int64_t>(-2, -11);
+    if (j != -1)
+        return -1;
+    j = kronecker<int64_t>(-2, -9);
+    if (j != -1)
+        return -1;
+    j = kronecker<int64_t>(-2, -7);
+    if (j != 1)
+        return -1;
+    j = kronecker<int64_t>(-2, -5);
+    if (j != 1)
+        return -1;
+    j = kronecker<int64_t>(-2, -3);
+    if (j != -1)
+        return -1;
+    j = kronecker<int64_t>(-2, -1);
+    if (j != -1)
+        return -1;
+    j = kronecker<int64_t>(-2, 1);
+    if (j != 1)
+        return 1;
+    j = kronecker<int64_t>(-2, 3);
+    if (j != 1)
+        return 1;
+    j = kronecker<int64_t>(-2, 5);
+    if (j != -1)
+        return -1;
+    j = kronecker<int64_t>(-2, 7);
+    if (j != -1)
+        return -1;
+    j = kronecker<int64_t>(-2, 9);
+    if (j != 1)
+        return -1;
+    j = kronecker<int64_t>(-2, 11);
+    if (j != 1)
+        return -1;
+    j = kronecker<int64_t>(2, 9);
+    if (j != 1)
+        return -1;
+    j = kronecker<int64_t>(2, -9);
+    if (j != 1)
+        return -1;
+    j = kronecker<int64_t>(2, 11);
+    if (j != -1)
+        return -1;
+    j = kronecker<int64_t>(2, -11);
+    if (j != -1)
+        return -1;
+    j = kronecker<int64_t>(3, 11);
+    if (j != 1)
+        return -1;
+    j = kronecker<int64_t>(-3, 11);
+    if (j != -1)
+        return -1;
+    j = kronecker<int64_t>(3, 13);
+    if (j != 1)
+        return -1;
+    j = kronecker<int64_t>(-3, 13);
+    if (j != 1)
+        return -1;
+    j = kronecker<int64_t>(3, 15);
+    if (j != 0)
+        return -1;
+    j = kronecker<int64_t>(-3, 15);
+    if (j != 0)
         return -1;
 
     printf("Modinv ...\n");
