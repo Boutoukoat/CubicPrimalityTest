@@ -156,6 +156,7 @@ template <class T, class TT> static TT mul2(const T &u, const T &v)
     return (T)r;
 }
 
+// gcd (x, y) based on Stein's algorithm
 template <class T> static T gcd(const T &x, const T &y)
 {
     if (x == 0)
@@ -184,7 +185,7 @@ template <class T> static T gcd(const T &x, const T &y)
     }
 }
 
-// jacobi symbol (x, y)
+// Jacobi symbol (x, y) based on Stein's algorithm
 template <class T> static int jacobi(const T &x, const T &y)
 {
     // assert((x & 1) == 0);
@@ -223,6 +224,7 @@ template <class T> static int jacobi(const T &x, const T &y)
     }
 }
 
+// Kronecker symbol (x, y) based on Stein's algorithm
 template <class T> static int kronecker(const T &x, const T &y)
 {
     unsigned x1 = x & 1;
@@ -299,7 +301,7 @@ template <class T> static int kronecker(const T &x, const T &y)
     v = n & 7;
     cn = (v == 3) || (v == 5);
 
-    // gulp trailing zeroes from a and apply Stein's algprithm.
+    // gulp trailing zeroes from a within Stein's algorithm.
     while (a > 0)
     {
         v = __builtin_ctzll(a);
@@ -351,7 +353,7 @@ template <class T, class TT> static T mod_inv(const T &x, const T &m)
         a -= b;
         u = sub_mod<T>(u, v, m);
     }
-    return v;
+    return b == 1 ? v : 0;
 }
 
 template <class T, class TT> static bool is_perfect_square(const T &a)
@@ -1487,6 +1489,11 @@ static int inner_self_test_64(void)
     t = 87654321;
     r = mod_inv<uint64_t, uint128_t>(s, t);
     if (r != 75327931)
+        return -1;
+    s = 11;
+    t = 99;
+    r = mod_inv<uint64_t, uint128_t>(s, t);
+    if (r != 0)
         return -1;
 
     printf("Power ...\n");
