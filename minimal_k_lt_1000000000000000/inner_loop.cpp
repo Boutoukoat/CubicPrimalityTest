@@ -134,6 +134,11 @@ template <class T, class TT> static T mod(const TT &u, const T &q)
     return (T)r;
 }
 
+template <class T> static T mod(const T &u, const T &q)
+{
+    return u % q;
+}
+
 template <class T, class TT> static TT square(const T &u)
 {
     TT r = u;
@@ -194,34 +199,98 @@ template <class T> static int jacobi(const T &x, const T &y)
     {
         return ((y + 2) & 4) ? -1 : 1;
     }
-    else
+    if (y == 1 || x == 1)
     {
-        int t = 1;
-        T a = x;
-        T n = y;
-        unsigned v = n & 7;
-        unsigned c = (v == 3) || (v == 5);
-        while (a)
+        return 1;
+    }
+
+    if (x == 2)
+    {
+        // char j[4] = { -1,-1,1,1};
+        // return j[((y - 3) >> 1) % 4];
+        return ((y + 2) & 4) ? -1 : 1;
+    }
+    if (x == 3)
+    {
+        char j[6] = {0, -1, -1, 0, 1, 1};
+        return j[((y - 3) >> 1) % 6];
+    }
+    if (x == 5)
+    {
+        char j[5] = {-1, 0, -1, 1, 1};
+        return j[((y - 3) >> 1) % 5];
+    }
+    if (x == 7)
+    {
+        char j[14] = {1, -1, 0, 1, -1, -1, -1, -1, 1, 0, -1, 1, 1, 1};
+        return j[((y - 3) >> 1) % 14];
+    }
+    if (x == 11)
+    {
+        char j[22] = {-1, 1, 1, 1, 0, -1, -1, -1, 1, -1, -1, 1, -1, -1, -1, 0, 1, 1, 1, -1, 1, 1};
+        return j[((y - 3) >> 1) % 22];
+    }
+    if (x == 13)
+    {
+        char j[13] = {1, -1, -1, 1, -1, 0, -1, 1, -1, -1, 1, 1, 1};
+        return j[((y - 3) >> 1) % 13];
+    }
+    if (x == 17)
+    {
+        char j[17] = {-1, -1, -1, 1, -1, 1, 1, 0, 1, 1, -1, 1, -1, -1, -1, 1, 1};
+        return j[((y - 3) >> 1) % 17];
+    }
+    if (x == 19)
+    {
+        char j[19] = {1, 1, -1, 1, -1, -1, 1, 1, 0, -1, -1, 1, 1, -1, 1, -1, -1, -1, -1};
+        unsigned t = ((y - 3) >> 1) % 38;
+        return t >= 19 ? -j[t - 19] : j[t];
+    }
+    if (x == 23)
+    {
+        char j[23] = {-1, -1, 1, 1, 1, 1, 1, -1, 1, -1, 0, 1, -1, 1, -1, -1, -1, -1, -1, 1, 1, -1, -1};
+        unsigned t = ((y - 3) >> 1) % 46;
+        return t >= 23 ? -j[t - 23] : j[t];
+    }
+    if (x == 29)
+    {
+        char j[29] = {-1, 1, 1,  1,  -1, 1,  -1, -1, -1, -1, 1, 1,  -1, 0, -1,
+                      1,  1, -1, -1, -1, -1, 1,  -1, 1,  1,  1, -1, 1,  1};
+        return j[((y - 3) >> 1) % 29];
+    }
+    if (x == 31)
+    {
+        char j[31] = {1,  1,  -1, 1, 1, -1, 1,  -1, -1, -1, 1, 1,  1,  -1, 0, 1,
+                      -1, -1, -1, 1, 1, 1,  -1, 1,  -1, -1, 1, -1, -1, -1, -1};
+        unsigned t = ((y - 3) >> 1) % 62;
+        return t >= 31 ? -j[t - 31] : j[t];
+    }
+
+    int t = 1;
+    T a = x;
+    T n = y;
+    unsigned v = n & 7;
+    unsigned c = (v == 3) || (v == 5);
+    while (a)
+    {
+        v = __builtin_ctzll(a);
+        a >>= v;
+        t = (c & (v & 1)) ? -t : t;
+
+        if (a < n)
         {
-            v = __builtin_ctzll(a);
-            a >>= v;
-            t = (c & (v & 1)) ? -t : t;
-
-            if (a < n)
-            {
-                T tmp = a;
-                a = n;
-                n = tmp;
-                t = ((a & n & 3) == 3) ? -t : t;
-                v = n & 7;
-                c = (v == 3) || (v == 5);
-            }
-
-            a -= n;
+            T tmp = a;
+            a = n;
+            n = tmp;
+            t = ((a & n & 3) == 3) ? -t : t;
+            v = n & 7;
+            c = (v == 3) || (v == 5);
         }
 
-        return (n == 1) ? t : 0;
+        a -= n;
     }
+
+    return (n == 1) ? t : 0;
 }
 
 // Kronecker symbol (x, y) based on Stein's algorithm
@@ -231,9 +300,20 @@ template <class T> static int kronecker(const T &x, const T &y)
     unsigned y1 = y & 1;
     if (y1 == 1)
     {
-        // bit wizardry for K(+/- 2,n), K(+/- 3,n) when n odd
-        static int table3[12] = {0, 1, 0, 0, 0, -1, 0, -1, 0, 0, 0, 1};
+        // bit wizardry for K(+/- 2,y), K(+/- 3,y) when y odd
 
+        if (x == 0)
+        {
+            return (y == 1) ? 1 : 0;
+        }
+        if (x == 1)
+        {
+            return 1;
+        }
+        if (x == -1)
+        {
+            return (y & 2) ? -1 : 1;
+        }
         if (x == 2)
         {
             return ((y + 2) & 4) ? -1 : 1;
@@ -242,23 +322,27 @@ template <class T> static int kronecker(const T &x, const T &y)
         {
             return (y & 4) ? -1 : 1;
         }
-        if (x == 3)
+        if (x1 == 1)
         {
-            return table3[y % 12];
-        }
-        if (x == -3)
-        {
-            return (y & 2) ? -table3[y % 12] : table3[y % 12];
+            if (x >= 0)
+            {
+                return jacobi<T>(x, y);
+            }
+            else
+            {
+                int j = jacobi<T>(-x, y);
+                return (y & 2) ? -j : j;
+            }
         }
     }
     else
     {
-        // bit wizardry when n even
+        // bit wizardry when y even
         if ((x1 == 0 && y1 == 0) || (y == 0 && !(x == 1 || x == -1)))
         {
             return 0;
         }
-        else if (y == 0)
+        if (y == 0)
         {
             return 1;
         }
@@ -745,50 +829,142 @@ template <class T, class TT> void ok_exponentiate3(T &s, T &t, T &u, const T e, 
     }
 }
 
-//  Mod(Mod(x+t,n),x^2-a)^e
+//  Mod(Mod(x+t,n),x^2-(sgn*a))^e
 //
 //  if T is uint64_t, assume t,a,n,e are 61 bit numbers   (require 3 guard bits)
-template <class T, class TT> void exponentiate2(T &s, T &t, const T e, const T n, const T a)
+template <class T, class TT> void exponentiate2(T &s, T &t, const T e, const T n, const int sgn, const T a)
 {
     T t0 = t;
-    T tmp;
+    T t2, s2, ss, tt;
+    TT tmp, ss2, tt2;
     unsigned bit = log_2<T>(e);
     while (bit--)
     {
-        T t2 = square_mod<T, TT>(t, n);   // f bits
-        T s2 = square_mod<T, TT>(s, n);   // f bits
-        TT ss = mul_mod<T, TT>(s, t, n);  // f bits
-        ss += ss;                         // f+1 bits
-        TT tt = mul_mod<T, TT>(s2, a, n); // f bits
-        tt += t2;                         // f+1 bits
-
-        if (e & ((T)1 << bit))
+        t2 = square_mod<T, TT>(t, n); // f bits
+        s2 = square_mod<T, TT>(s, n); // f bits
+        ss = mul_mod<T, TT>(s, t, n); // f bits
+        ss += ss;                     // f+1 bits
+        if (__builtin_constant_p(sgn) && sgn == 1)
         {
-            TT tmp = ss * a; // 2f + 1 bits
-            if (__builtin_constant_p(t0) && t0 == 0)
+            if (__builtin_constant_p(a) && a == 1)
             {
-                ss = tt;
-                tt = tmp;
+                tt = s2 + t2; // f+1 bits
             }
-            else if (__builtin_constant_p(t0) && t0 == 1)
+            else if (__builtin_constant_p(a) && a == 2)
             {
-                ss = ss + tt;
-                tt = tt + tmp;
-            }
-            else if (__builtin_constant_p(t0) && t0 == 2)
-            {
-                ss += ss + tt;
-                tt += tt + tmp;
+                tt = s2 + s2 + t2; // f+2 bits
             }
             else
             {
-                ss = t0 * ss + tt;  // 3f + 2
-                tt = t0 * tt + tmp; // 4f + 2
+                tt = mul_mod<T, TT>(s2, a, n); // f bits
+                tt += t2;                      // f+1 bits
             }
         }
+        else if (__builtin_constant_p(sgn) && sgn == -1)
+        {
+            if (__builtin_constant_p(a) && a == 1)
+            {
+                tt = n - s2 + t2; // f+1 bits
+            }
+            else if (__builtin_constant_p(a) && a == 2)
+            {
+                tt = n + n - (s2 + s2) + t2; // f+2 bits
+            }
+            else
+            {
+                tt = mul_mod<T, TT>(s2, n - a, n); // f bits
+                tt += t2;                          // f+1 bits
+            }
+        }
+        else if (sgn == 1)
+        {
+            tt = mul_mod<T, TT>(s2, a, n); // f bits
+            tt += t2;                      // f+1 bits
+        }
+        else if (sgn == -1)
+        {
+            tt = mul_mod<T, TT>(s2, n - a, n); // f bits
+            tt += t2;                          // f+1 bits
+        }
+        else
+        {
+            assert(0);
+        }
 
-        s = mod<T, TT>(ss, n);
-        t = mod<T, TT>(tt, n);
+        if (e & ((T)1 << bit))
+        {
+            if (__builtin_constant_p(sgn) && sgn == 1)
+            {
+                if (__builtin_constant_p(a) && a == 1)
+                {
+                    tmp = ss; // 2f + 1 bits
+                }
+                else if (__builtin_constant_p(a) && a == 2)
+                {
+                    tmp = ss + ss; // 2f + 1 bits
+                }
+                else
+                {
+                    tmp = (TT)ss * a; // 2f + 1 bits
+                }
+            }
+            else if (__builtin_constant_p(sgn) && sgn == -1)
+            {
+                if (__builtin_constant_p(a) && a == 1)
+                {
+                    tmp = n + n - ss; // 2f + 1 bits
+                }
+                else if (__builtin_constant_p(a) && a == 2)
+                {
+                    tmp = n + n - ss; // 2f + 1 bits
+                    tmp <<= 1;
+                }
+                else
+                {
+                    tmp = (TT)ss * (n - a); // 2f + 1 bits
+                }
+            }
+            else if (sgn == 1)
+            {
+                tmp = (TT)ss * a; // 2f + 1 bits
+            }
+            else if (sgn == -1)
+            {
+                tmp = (TT)ss * (n - a); // 2f + 1 bits
+            }
+            else
+            {
+                assert(0);
+            }
+
+            if (__builtin_constant_p(t0) && t0 == 0)
+            {
+                ss2 = tt;
+                tt2 = tmp;
+            }
+            else if (__builtin_constant_p(t0) && t0 == 1)
+            {
+                ss2 = ss + tt;
+                tt2 = tt + tmp;
+            }
+            else if (__builtin_constant_p(t0) && t0 == 2)
+            {
+                ss2 = ss + ss + tt;
+                tt2 = tt + tt + tmp;
+            }
+            else
+            {
+                ss2 = (TT)ss * t0 + tt;  // 3f + 2 bits
+                tt2 = (TT)tt * t0 + tmp; // 4f + 2 bits
+            }
+            s = mod<T, TT>(ss2, n);
+            t = mod<T, TT>(tt2, n);
+        }
+        else
+        {
+            s = mod<T>(ss, n);
+            t = mod<T>(tt, n);
+        }
     }
 }
 
@@ -876,14 +1052,14 @@ template <class T, class TT> void exponentiate_half(T &s, T &t, const T e, const
     }
 }
 
-template <class T, class TT> static bool islnrc2prime(const T &n, int s = 0, int cid = 0)
+template <class T, class TT> static bool old_islnrc2prime(const T &n, int s = 0, int cid = 0)
 {
     if (n < 23)
         return (n == 1 || n == 2 || n == 3 || n == 5 || n == 7 || n == 11 || n == 13 || n == 17 ||
                 n == 19); // prime for sure
 
     if (is_perfect_square<T, TT>(n))
-        return false; // n composite
+        return false; // n composite perfect square
 
     if (jacobi<T>(2, n) == -1)
     {
@@ -915,7 +1091,7 @@ template <class T, class TT> static bool islnrc2prime(const T &n, int s = 0, int
 
         T bs = 1;
         T bt = 2;
-        exponentiate2<T, TT>(bs, bt, n + 1, n, n - 1);
+        exponentiate2<T, TT>(bs, bt, n + 1, n, -1, 1);
         return (bs == 0 && bt == 5); // ?? n prime ? n composite for sure ?
     }
     else
@@ -985,11 +1161,75 @@ template <class T, class TT> static bool islnrc2prime(const T &n, int s = 0, int
             // A linear reccurrence Mod(Mod(x+b, n), x^2-a)^(n+1)
             T bs = 1;
             T bt = b;
-            exponentiate2<T, TT>(bs, bt, n + 1, n, a);
+            exponentiate2<T, TT>(bs, bt, n + 1, n, 1, a);
             return (bs == 0 &&
                     add_mod<T, TT>(bt, a, n) == square_mod<T, TT>(b, n)); // ?? n prime ? n composite for sure ?
         }
     }
+}
+
+/*
+If n==3 mod 4 test Mod(Mod(x+2,n),x^2+1)^(n+1)==5.
+If n==5 mod 8 test Mod(Mod(x+2,n),x^2+2)^(n+1)==6.
+If n==1 mod 8 test Mod(Mod(x+2,n),x^2-a)^(n+1)==4-a and Mod(Mod(x+2,n),x^2+a)^(n+1)==4+a for kronecker(a,n)==-1
+*/
+
+template <class T, class TT> static bool islnrc2prime(const T &n, int s = 0, int cid = 0)
+{
+    if (n < 23)
+        return (n == 1 || n == 2 || n == 3 || n == 5 || n == 7 || n == 11 || n == 13 || n == 17 ||
+                n == 19); // prime for sure
+
+    T mod8 = n & 7;
+    if (mod8 == 3 || mod8 == 7)
+    {
+        // (x+2)^(n+1) mod (n, x^2+1) == 5
+        T bs = 1;
+        T bt = 2;
+        exponentiate2<T, TT>(bs, bt, n + 1, n, -1, 1);
+        // printf("3 mod 4 : %lx %lx %lx\n", bs, bt, n);
+        return (bs == 0 && bt == 5); // ?? n prime ? n composite for sure ?
+    }
+    if (mod8 == 5)
+    {
+        // (x+2)^(n+1) mod (n, x^2+2) == 6
+        T bs = 1;
+        T bt = 2;
+        exponentiate2<T, TT>(bs, bt, n + 1, n, -1, 2);
+        // printf("5 mod 8 : %lx %lx %lx\n", bs, bt, n);
+        return (bs == 0 && bt == 6); // ?? n prime ? n composite for sure ?
+    }
+
+    if (is_perfect_square<T, TT>(n))
+        return false; // n composite perfect square, for any x, kronecker(x, n)==1 always
+
+    // search minimal a where Kronecker(a, n) == -1
+    T a;
+    for (a = 3;; a++)
+    {
+        if (!isprime<T, TT>(a))
+            continue;
+
+        int j = jacobi<T>(a, n);
+        if (j == 0)
+            return false; // composite for sure
+        if (j == -1)
+            break;
+    }
+    // (x+2)^(n+1) mod (n, x^2+a) == 4+a
+    T bs = 1;
+    T bt = 2;
+    exponentiate2<T, TT>(bs, bt, n + 1, n, -1, a);
+    if (!(bs == 0 && bt == add_mod<T, TT>(4, a, n)))
+        return false; // composite for sure
+
+    // (x+2)^(n+1) mod (n, x^2-a) == 4-a
+    bs = 1;
+    bt = 2;
+    exponentiate2<T, TT>(bs, bt, n + 1, n, 1, a);
+    if (!(bs == 0 && bt == add_mod<T, TT>(4, n - a, n)))
+        return false; // composite for sure
+    return true;      // ?? n prime ?
 }
 
 template <class T, class TT> static bool islnrc3prime(const T &n, int s = 0, int cid = 0)
@@ -1243,16 +1483,30 @@ int inner_loop(int s, uint16_t cid, uint128_t seed, uint64_t count)
         {
             if (!rl)
             {
+                // printf("pseudocomposite %lx\n", (uint64_t)v);
                 if (s)
+                {
                     tlv_write(s, cid, TLV_PSEUDOCOMPOSITE, v);
+                }
+            }
+            else
+            {
+                // printf("prime %lx\n", (uint64_t)v);
             }
         }
         else
         {
             if (rl)
             {
+                // printf("pseudoprime %lx\n", (uint64_t)v);
                 if (s)
+                {
                     tlv_write(s, cid, TLV_PSEUDOPRIME, v);
+                }
+            }
+            else
+            {
+                // printf("composite %lx\n", (uint64_t)v);
             }
         }
     }
@@ -1545,7 +1799,7 @@ static int inner_self_test_64(void)
         uint64_t s, t;
         s = 1;
         t = 2;
-        exponentiate2<uint64_t, uint128_t>(s, t, 2, 101, 13);
+        exponentiate2<uint64_t, uint128_t>(s, t, 2, 101, 1, 13);
         if (s != 4 || t != 17)
         {
             printf("linear recurrence 2 failed _2_\n");
@@ -1553,7 +1807,7 @@ static int inner_self_test_64(void)
         }
         s = 1;
         t = 2;
-        exponentiate2<uint64_t, uint128_t>(s, t, 4, 101, 13);
+        exponentiate2<uint64_t, uint128_t>(s, t, 4, 101, 1, 13);
         if (s != 35 || t != 93)
         {
             printf("linear recurrence 2 failed _4_\n");
@@ -1561,7 +1815,7 @@ static int inner_self_test_64(void)
         }
         s = 1;
         t = 2;
-        exponentiate2<uint64_t, uint128_t>(s, t, 3, 101, 13);
+        exponentiate2<uint64_t, uint128_t>(s, t, 3, 101, 1, 13);
         if (s != 25 || t != 86)
         {
             printf("linear recurrence 2 failed _3_\n");
@@ -1569,7 +1823,7 @@ static int inner_self_test_64(void)
         }
         s = 1;
         t = 2;
-        exponentiate2<uint64_t, uint128_t>(s, t, 5, 101, 13);
+        exponentiate2<uint64_t, uint128_t>(s, t, 5, 101, 1, 13);
         if (s != 62 || t != 35)
         {
             printf("linear recurrence 2 failed _5_\n");
@@ -1577,7 +1831,7 @@ static int inner_self_test_64(void)
         }
         s = 1;
         t = 0;
-        exponentiate2<uint64_t, uint128_t>(s, t, 12, 101, 13);
+        exponentiate2<uint64_t, uint128_t>(s, t, 12, 101, 1, 13);
         if (s != 0 || t != 19)
         {
             printf("linear recurrence 2 failed _12_\n");
