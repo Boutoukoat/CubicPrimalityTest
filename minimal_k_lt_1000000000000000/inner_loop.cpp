@@ -829,144 +829,6 @@ template <class T, class TT> void ok_exponentiate3(T &s, T &t, T &u, const T e, 
     }
 }
 
-//  Mod(Mod(x+t,n),x^2-(sgn*a))^e
-//
-//  if T is uint64_t, assume t,a,n,e are 61 bit numbers   (require 3 guard bits)
-template <class T, class TT> void exponentiate2(T &s, T &t, const T e, const T n, const int sgn, const T a)
-{
-    T t0 = t;
-    T t2, s2, ss, tt;
-    TT tmp, ss2, tt2;
-    unsigned bit = log_2<T>(e);
-    while (bit--)
-    {
-        t2 = square_mod<T, TT>(t, n); // f bits
-        s2 = square_mod<T, TT>(s, n); // f bits
-        ss = mul_mod<T, TT>(s, t, n); // f bits
-        ss += ss;                     // f+1 bits
-        if (__builtin_constant_p(sgn) && sgn == 1)
-        {
-            if (__builtin_constant_p(a) && a == 1)
-            {
-                tt = s2 + t2; // f+1 bits
-            }
-            else if (__builtin_constant_p(a) && a == 2)
-            {
-                tt = s2 + s2 + t2; // f+2 bits
-            }
-            else
-            {
-                tt = mul_mod<T, TT>(s2, a, n); // f bits
-                tt += t2;                      // f+1 bits
-            }
-        }
-        else if (__builtin_constant_p(sgn) && sgn == -1)
-        {
-            if (__builtin_constant_p(a) && a == 1)
-            {
-                tt = n - s2 + t2; // f+1 bits
-            }
-            else if (__builtin_constant_p(a) && a == 2)
-            {
-                tt = n + n - (s2 + s2) + t2; // f+2 bits
-            }
-            else
-            {
-                tt = mul_mod<T, TT>(s2, n - a, n); // f bits
-                tt += t2;                          // f+1 bits
-            }
-        }
-        else if (sgn == 1)
-        {
-            tt = mul_mod<T, TT>(s2, a, n); // f bits
-            tt += t2;                      // f+1 bits
-        }
-        else if (sgn == -1)
-        {
-            tt = mul_mod<T, TT>(s2, n - a, n); // f bits
-            tt += t2;                          // f+1 bits
-        }
-        else
-        {
-            assert(0);
-        }
-
-        if (e & ((T)1 << bit))
-        {
-            if (__builtin_constant_p(sgn) && sgn == 1)
-            {
-                if (__builtin_constant_p(a) && a == 1)
-                {
-                    tmp = ss; // 2f + 1 bits
-                }
-                else if (__builtin_constant_p(a) && a == 2)
-                {
-                    tmp = ss + ss; // 2f + 1 bits
-                }
-                else
-                {
-                    tmp = (TT)ss * a; // 2f + 1 bits
-                }
-            }
-            else if (__builtin_constant_p(sgn) && sgn == -1)
-            {
-                if (__builtin_constant_p(a) && a == 1)
-                {
-                    tmp = n + n - ss; // 2f + 1 bits
-                }
-                else if (__builtin_constant_p(a) && a == 2)
-                {
-                    tmp = n + n - ss; // 2f + 1 bits
-                    tmp <<= 1;
-                }
-                else
-                {
-                    tmp = (TT)ss * (n - a); // 2f + 1 bits
-                }
-            }
-            else if (sgn == 1)
-            {
-                tmp = (TT)ss * a; // 2f + 1 bits
-            }
-            else if (sgn == -1)
-            {
-                tmp = (TT)ss * (n - a); // 2f + 1 bits
-            }
-            else
-            {
-                assert(0);
-            }
-
-            if (__builtin_constant_p(t0) && t0 == 0)
-            {
-                ss2 = tt;
-                tt2 = tmp;
-            }
-            else if (__builtin_constant_p(t0) && t0 == 1)
-            {
-                ss2 = ss + tt;
-                tt2 = tt + tmp;
-            }
-            else if (__builtin_constant_p(t0) && t0 == 2)
-            {
-                ss2 = ss + ss + tt;
-                tt2 = tt + tt + tmp;
-            }
-            else
-            {
-                ss2 = (TT)ss * t0 + tt;  // 3f + 2 bits
-                tt2 = (TT)tt * t0 + tmp; // 4f + 2 bits
-            }
-            s = mod<T, TT>(ss2, n);
-            t = mod<T, TT>(tt2, n);
-        }
-        else
-        {
-            s = mod<T>(ss, n);
-            t = mod<T>(tt, n);
-        }
-    }
-}
 
 //  Mod(Mod(x+u,n),x^3-a*x-a)^e
 //
@@ -1052,186 +914,6 @@ template <class T, class TT> void exponentiate_half(T &s, T &t, const T e, const
     }
 }
 
-template <class T, class TT> static bool old_islnrc2prime(const T &n, int s = 0, int cid = 0)
-{
-    if (n < 23)
-        return (n == 1 || n == 2 || n == 3 || n == 5 || n == 7 || n == 11 || n == 13 || n == 17 ||
-                n == 19); // prime for sure
-
-    if (is_perfect_square<T, TT>(n))
-        return false; // n composite perfect square
-
-    if (jacobi<T>(2, n) == -1)
-    {
-        if ((uint64_t)(n * 0xaaaaaaaaaaaaaaabull) <= 0x5555555555555555ull)
-            return false; // divisible by 3
-
-        // 1 Fermat test
-        if (pow_mod<T, TT>(2, n, n) != 2)
-            return false; // n composite;
-        T bs = 1;
-        T bt = 0;
-        exponentiate_half<T, TT>(bs, bt, n + 1, n);
-        return (bs == 0 && bt + 1 == n); // ?? n prime ? n composite for sure ?
-    }
-    else if ((n & 3) == 3)
-    {
-        /* a = n-1; b = 2; c = 3; r = 1 */
-
-        if ((uint64_t)(n * 0xaaaaaaaaaaaaaaabull) <= 0x5555555555555555ull)
-            return false; // divisible by 3
-        if ((uint64_t)(n * 0x2e8ba2e8ba2e8ba3ull) <= 0x1745d1745d1745d1ull)
-            return false; // divisible by 11
-
-        // 2 Fermat tests
-        if (pow_mod<T, TT>(2, n, n) != 2)
-            return false; // n composite;
-        if (pow_mod<T, TT>(3, n, n) != 3)
-            return false; // n composite;
-
-        T bs = 1;
-        T bt = 2;
-        exponentiate2<T, TT>(bs, bt, n + 1, n, -1, 1);
-        return (bs == 0 && bt == 5); // ?? n prime ? n composite for sure ?
-    }
-    else
-    {
-        for (T k = 1;; k++)
-        {
-            T a, b, c, g, j;
-
-            // a = 2^k + 1
-            // b = a - 1
-            // c = 2*a - 1
-            assert(k < 128);
-            b = pow_mod<T, TT>(2, k, n);
-            if (b < 2 || b == n - 1)
-                continue; // try another a
-            assert(k < 61);
-            a = b + 1;
-            a %= n;
-            if (a < 2 || a == n - 1)
-                continue; // try another a
-            c = 2 * a - 1;
-            c %= n;
-            if (c < 2 || c == n - 1)
-                continue; // try another a
-
-            // verify a is not a quadratic residue
-            j = jacobi<T>(a, n);
-            if (j == 0)
-                return false; // n composite
-            if (j == 1)
-                continue; // try another a
-
-            // verify gcd(b^2+a, n) == 1
-            g = mul_mod<T, TT>(b, b, n);
-            g = add_mod<T, TT>(g, a, n);
-            g = gcd<T>(g, n);
-            if (g > 1)
-                return false; // n composite
-
-            // verify gcd(3*b^2+a, n) == 1
-            g = add_mod<T, TT>(3 * square_mod<T, TT>(b, n), a, n);
-            g = gcd<T>(g, n);
-            if (g > 1)
-                return false; // n composite
-
-#if 0
-	    static T kmax = 0;
-	    if (k > kmax)
-	    {
-		    kmax = k;
-		    printf("%lu %lu\n", k, n);
-	            if (s | cid)
-        	    {
-                	tlv_write(s, cid, TLV_B1, n);
-	            }
-	    }
-#endif
-
-            // 4 Fermat tests
-            if (pow_mod<T, TT>(2, n, n) != 2)
-                return false; // n composite;
-            if (pow_mod<T, TT>(a, n, n) != a)
-                return false; // n composite;
-            if (pow_mod<T, TT>(c, n, n) != c)
-                return false; // n composite;
-
-            // A linear reccurrence Mod(Mod(x+b, n), x^2-a)^(n+1)
-            T bs = 1;
-            T bt = b;
-            exponentiate2<T, TT>(bs, bt, n + 1, n, 1, a);
-            return (bs == 0 &&
-                    add_mod<T, TT>(bt, a, n) == square_mod<T, TT>(b, n)); // ?? n prime ? n composite for sure ?
-        }
-    }
-}
-
-/*
-If n==3 mod 4 test Mod(Mod(x+2,n),x^2+1)^(n+1)==5.
-If n==5 mod 8 test Mod(Mod(x+2,n),x^2+2)^(n+1)==6.
-If n==1 mod 8 test Mod(Mod(x+2,n),x^2-a)^(n+1)==4-a and Mod(Mod(x+2,n),x^2+a)^(n+1)==4+a for kronecker(a,n)==-1
-*/
-
-template <class T, class TT> static bool islnrc2prime(const T &n, int s = 0, int cid = 0)
-{
-    if (n < 23)
-        return (n == 1 || n == 2 || n == 3 || n == 5 || n == 7 || n == 11 || n == 13 || n == 17 ||
-                n == 19); // prime for sure
-
-    T mod8 = n & 7;
-    if (mod8 == 3 || mod8 == 7)
-    {
-        // (x+2)^(n+1) mod (n, x^2+1) == 5
-        T bs = 1;
-        T bt = 2;
-        exponentiate2<T, TT>(bs, bt, n + 1, n, -1, 1);
-        // printf("3 mod 4 : %lx %lx %lx\n", bs, bt, n);
-        return (bs == 0 && bt == 5); // ?? n prime ? n composite for sure ?
-    }
-    if (mod8 == 5)
-    {
-        // (x+2)^(n+1) mod (n, x^2+2) == 6
-        T bs = 1;
-        T bt = 2;
-        exponentiate2<T, TT>(bs, bt, n + 1, n, -1, 2);
-        // printf("5 mod 8 : %lx %lx %lx\n", bs, bt, n);
-        return (bs == 0 && bt == 6); // ?? n prime ? n composite for sure ?
-    }
-
-    if (is_perfect_square<T, TT>(n))
-        return false; // n composite perfect square, for any x, kronecker(x, n)==1 always
-
-    // search minimal a where Kronecker(a, n) == -1
-    T a;
-    for (a = 3;; a++)
-    {
-        if (!isprime<T, TT>(a))
-            continue;
-
-        int j = jacobi<T>(a, n);
-        if (j == 0)
-            return false; // composite for sure
-        if (j == -1)
-            break;
-    }
-    // (x+2)^(n+1) mod (n, x^2+a) == 4+a
-    T bs = 1;
-    T bt = 2;
-    exponentiate2<T, TT>(bs, bt, n + 1, n, -1, a);
-    if (!(bs == 0 && bt == add_mod<T, TT>(4, a, n)))
-        return false; // composite for sure
-
-    // (x+2)^(n+1) mod (n, x^2-a) == 4-a
-    bs = 1;
-    bt = 2;
-    exponentiate2<T, TT>(bs, bt, n + 1, n, 1, a);
-    if (!(bs == 0 && bt == add_mod<T, TT>(4, n - a, n)))
-        return false; // composite for sure
-    return true;      // ?? n prime ?
-}
-
 template <class T, class TT> static bool islnrc3prime(const T &n, int s = 0, int cid = 0)
 {
     if (n < 23)
@@ -1296,164 +978,6 @@ template <class T, class TT> static bool islnrc3prime(const T &n, int s = 0, int
     return true;      // might be prime
 }
 
-// Mod(Mod(x, n), x^5 - a*x - 4*a)^e
-template <class T, class TT> void exponentiate5(T &vm, T &wm, T &xm, T &ym, T &zm, const T e, const T n, const T a)
-{
-    int bit = log_2<T>(e);
-
-    const T p = 0;
-    const T q = 0;
-    const T r = 0;
-    const T s = a;
-    const T t = 4 * a;
-
-    const T bp = p * p + q;
-    const T bq = p * q + r;
-    const T br = p * r + s;
-    const T bs = p * s + t;
-    const T bt = p * t;
-
-    const T cp = bp * p + bq;
-    const T cq = bp * q + br;
-    const T cr = bp * r + bs;
-    const T cs = bp * s + bt;
-    const T ct = bp * t;
-
-    const T dp = cp * p + cq;
-    const T dq = cp * q + cr;
-    const T dr = cp * r + cs;
-    const T ds = cp * s + ct;
-    const T dt = cp * t;
-
-    TT tmp;
-    T t0, t1, t2, t3, t4;
-    TT qv, qw, qx, qy, qz;
-    while (bit--)
-    {
-        tmp = square<T, TT>(vm);
-        t0 = mod<T, TT>(tmp, n);
-        tmp = mul2<T, TT>(vm, wm);
-        t1 = mod<T, TT>(tmp, n);
-        tmp = square<T, TT>(wm) + mul2<T, TT>(vm, xm);
-        t2 = mod<T, TT>(tmp, n);
-        tmp = mul2<T, TT>(wm, xm) + mul2<T, TT>(vm, ym);
-        t3 = mod<T, TT>(tmp, n);
-        qv = mul<T, TT>(dp, t0) + mul<T, TT>(cp, t1) + mul<T, TT>(bp, t2) + mul<T, TT>(p, t3) + square<T, TT>(xm) +
-             mul2<T, TT>(wm, ym) + mul2<T, TT>(vm, zm);
-        qw = mul<T, TT>(dq, t0) + mul<T, TT>(cq, t1) + mul<T, TT>(bq, t2) + mul<T, TT>(q, t3) + mul2<T, TT>(xm, ym) +
-             mul2<T, TT>(wm, zm);
-        qx = mul<T, TT>(dr, t0) + mul<T, TT>(cr, t1) + mul<T, TT>(br, t2) + mul<T, TT>(r, t3) + square<T, TT>(ym) +
-             mul2<T, TT>(xm, zm);
-        qy = mul<T, TT>(ds, t0) + mul<T, TT>(cs, t1) + mul<T, TT>(bs, t2) + mul<T, TT>(s, t3) + mul2<T, TT>(ym, zm);
-        qz = mul<T, TT>(dt, t0) + mul<T, TT>(ct, t1) + mul<T, TT>(bt, t2) + mul<T, TT>(t, t3) + square<T, TT>(zm);
-
-        if (e & ((T)1 << bit))
-        {
-            t4 = mod<T, TT>(qv, n);
-            qv = mul<T, TT>(p, t4) + qw;
-            qw = mul<T, TT>(q, t4) + qx;
-            qx = mul<T, TT>(r, t4) + qy;
-            qy = mul<T, TT>(s, t4) + qz;
-            qz = mul<T, TT>(t, t4);
-        }
-
-        vm = mod<T, TT>(qv, n);
-        wm = mod<T, TT>(qw, n);
-        xm = mod<T, TT>(qx, n);
-        ym = mod<T, TT>(qy, n);
-        zm = mod<T, TT>(qz, n);
-    }
-}
-
-template <class T, class TT> static bool islnrc5prime(const T &n, int s = 0, int cid = 0)
-{
-    if (n < 23)
-    {
-        // prime for sure
-        return (n == 1 || n == 2 || n == 3 || n == 5 || n == 7 || n == 11 || n == 13 || n == 17 || n == 19);
-    }
-
-    if (is_perfect_sursolid<T, TT>(n))
-    {
-        return false; // composite
-    }
-
-    T k, a, bv, bw, bx, by, bz;
-    for (k = 1;; k++)
-    {
-        a = 19 + k * (k - 1);
-        if (a % 5 != 1)
-        {
-            continue; // try another a
-        }
-        if (!isprime<T, TT>(a))
-        {
-            continue; // try another a
-        }
-        if (pow_mod<T, TT>(mod<T, TT>(n, a), (a - 1) / 5, a) == 1)
-        {
-            continue; // try another a
-        }
-        if (a == n)
-        {
-            return true; // n is a small prime
-        }
-        T g = gcd((2 * k - 1) * a * (2 * a - 1), n);
-        if (g == n)
-        {
-            continue; // try another a
-        }
-        if (g > 1)
-        {
-            return false; //  composite
-        }
-        bv = 0;
-        bw = 0;
-        bx = 0;
-        by = 1;
-        bz = 0;
-        exponentiate5<T, TT>(bv, bw, bx, by, bz, n - 1, n, a);
-        if (bv == 0 && bw == 0 && bx == 0 && by == 0 && bz == 1)
-        {
-            // log this cornercase for verification purposes
-            if (s | cid)
-            {
-                tlv_write(s, cid, TLV_B1, n);
-            }
-            continue; // try another a
-        }
-        break;
-    }
-    T bv2 = bv, bw2 = bw, bx2 = bx, by2 = by, bz2 = bz;
-    exponentiate5<T, TT>(bv2, bw2, bx2, by2, bz2, 2, n, a); // B^2
-    bv = add_mod<T, TT>(bv, bv2, n);
-    bw = add_mod<T, TT>(bw, bw2, n);
-    bx = add_mod<T, TT>(bx, bx2, n);
-    by = add_mod<T, TT>(by, by2, n);
-    bz = add_mod<T, TT>(bz, bz2, n);
-
-    exponentiate5<T, TT>(bv2, bw2, bx2, by2, bz2, 2, n, a); // B^4
-    bv = add_mod<T, TT>(bv, bv2, n);
-    bw = add_mod<T, TT>(bw, bw2, n);
-    bx = add_mod<T, TT>(bx, bx2, n);
-    by = add_mod<T, TT>(by, by2, n);
-    bz = add_mod<T, TT>(bz, bz2, n);
-
-    bv2 = bv, bw2 = bw, bx2 = bx, by2 = by, bz2 = bz;
-    exponentiate5<T, TT>(bv2, bw2, bx2, by2, bz2, 3, n, a); // B^3
-    bv = add_mod<T, TT>(bv, bv2, n);
-    bw = add_mod<T, TT>(bw, bw2, n);
-    bx = add_mod<T, TT>(bx, bx2, n);
-    by = add_mod<T, TT>(by, by2, n);
-    bz = add_mod<T, TT>(bz, bz2, n);
-
-    bz = add_mod<T, TT>(bz, 1, n);
-
-    if (bv != n - 1 || bw != 1 || bx != n - 1 || by != 1 || bz != a)
-        return false; // composite
-    return true;      // might be prime
-}
-
 int inner_loop(int s, uint16_t cid, uint128_t seed, uint64_t count)
 {
     bool r, rl;
@@ -1477,7 +1001,7 @@ int inner_loop(int s, uint16_t cid, uint128_t seed, uint64_t count)
         else
         {
             r = isprime<uint64_t, uint128_t>(v);
-            rl = islnrc2prime<uint64_t, uint128_t>(v, s, cid);
+            rl = islnrc3prime<uint64_t, uint128_t>(v, s, cid);
         }
         if (r)
         {
@@ -1793,51 +1317,6 @@ static int inner_self_test_64(void)
         return (-1);
     }
 
-    printf("Linear recurrence second order ...\n");
-    if (1)
-    {
-        uint64_t s, t;
-        s = 1;
-        t = 2;
-        exponentiate2<uint64_t, uint128_t>(s, t, 2, 101, 1, 13);
-        if (s != 4 || t != 17)
-        {
-            printf("linear recurrence 2 failed _2_\n");
-            return (-1);
-        }
-        s = 1;
-        t = 2;
-        exponentiate2<uint64_t, uint128_t>(s, t, 4, 101, 1, 13);
-        if (s != 35 || t != 93)
-        {
-            printf("linear recurrence 2 failed _4_\n");
-            return (-1);
-        }
-        s = 1;
-        t = 2;
-        exponentiate2<uint64_t, uint128_t>(s, t, 3, 101, 1, 13);
-        if (s != 25 || t != 86)
-        {
-            printf("linear recurrence 2 failed _3_\n");
-            return (-1);
-        }
-        s = 1;
-        t = 2;
-        exponentiate2<uint64_t, uint128_t>(s, t, 5, 101, 1, 13);
-        if (s != 62 || t != 35)
-        {
-            printf("linear recurrence 2 failed _5_\n");
-            return (-1);
-        }
-        s = 1;
-        t = 0;
-        exponentiate2<uint64_t, uint128_t>(s, t, 12, 101, 1, 13);
-        if (s != 0 || t != 19)
-        {
-            printf("linear recurrence 2 failed _12_\n");
-            return (-1);
-        }
-    }
     printf("Linear recurrence third order ...\n");
     if (1)
     {
@@ -1881,17 +1360,6 @@ static int inner_self_test_64(void)
             return (-1);
         }
     }
-    printf("Linear recurrence fifth order ...\n");
-    if (1)
-    {
-        uint64_t s, t, u, v, w;
-        s = 1;
-        t = 2;
-        u = 3;
-        v = 4;
-        w = 5;
-        // TODO
-    }
 
     printf("Isprime ...\n");
     t = 1;
@@ -1903,26 +1371,11 @@ static int inner_self_test_64(void)
         printf("isprime M(3) failed\n");
         return -1;
     }
-    b = islnrc2prime<uint64_t, uint128_t>(t);
-    if (!b)
-    {
-        printf("islnrc2 M(3) failed\n");
-        return -1;
-    }
     b = islnrc3prime<uint64_t, uint128_t>(t);
     if (!b)
     {
         printf("islnrc3 M(3) failed\n");
         return -1;
-    }
-    if (0)
-    {
-        b = islnrc5prime<uint64_t, uint128_t>(t);
-        if (!b)
-        {
-            printf("islnrc5 M(3) failed\n");
-            return -1;
-        }
     }
 
     t = 101;
@@ -1932,26 +1385,11 @@ static int inner_self_test_64(void)
         printf("isprime 101 failed\n");
         return -1;
     }
-    b = islnrc2prime<uint64_t, uint128_t>(t);
-    if (!b)
-    {
-        printf("islnrc2 101 failed\n");
-        return -1;
-    }
     b = islnrc3prime<uint64_t, uint128_t>(t);
     if (!b)
     {
         printf("islnrc3 101 failed\n");
         return -1;
-    }
-    if (0)
-    {
-        b = islnrc5prime<uint64_t, uint128_t>(t);
-        if (!b)
-        {
-            printf("islnrc5 101 failed\n");
-            return -1;
-        }
     }
 
     t = 4493;
@@ -1961,26 +1399,11 @@ static int inner_self_test_64(void)
         printf("isprime 4493 failed\n");
         return -1;
     }
-    b = islnrc2prime<uint64_t, uint128_t>(t);
-    if (!b)
-    {
-        printf("islnrc2 4493 failed\n");
-        return -1;
-    }
     b = islnrc3prime<uint64_t, uint128_t>(t);
     if (!b)
     {
         printf("islnrc3 4493 failed\n");
         return -1;
-    }
-    if (0)
-    {
-        b = islnrc5prime<uint64_t, uint128_t>(t);
-        if (!b)
-        {
-            printf("islnrc5 4493 failed\n");
-            return -1;
-        }
     }
 
     t = 1;
@@ -1992,26 +1415,11 @@ static int inner_self_test_64(void)
         printf("isprime M(31) failed\n");
         return -1;
     }
-    b = islnrc2prime<uint64_t, uint128_t>(t);
-    if (!b)
-    {
-        printf("islnrc2 M(31) failed\n");
-        return -1;
-    }
     b = islnrc3prime<uint64_t, uint128_t>(t);
     if (!b)
     {
         printf("islnrc3 M(31) failed\n");
         return -1;
-    }
-    if (0)
-    {
-        b = islnrc5prime<uint64_t, uint128_t>(t);
-        if (!b)
-        {
-            printf("islnrc5 M(31) failed\n");
-            return -1;
-        }
     }
 
     t = 1;
@@ -2021,12 +1429,6 @@ static int inner_self_test_64(void)
     if (!b)
     {
         printf("isprime M(61) failed\n");
-        return -1;
-    }
-    b = islnrc2prime<uint64_t, uint128_t>(t);
-    if (!b)
-    {
-        printf("islnrc2 M(61) failed\n");
         return -1;
     }
     b = islnrc3prime<uint64_t, uint128_t>(t);
