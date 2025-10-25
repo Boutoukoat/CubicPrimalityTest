@@ -26,6 +26,6 @@ struct mod_precompute_t
     uint64_t e;
 };
 
-void mpz_inner_multithread_exponentiate(mpz_t s, mpz_t t, mpz_t u, mpz_t e, uint64_t a, mod_precompute_t *p);
+void mpz_inner_multithread_exponentiate(mpz_t s, mpz_t t, mpz_t u, mpz_t e, uint64_t a, mod_precompute_t *p, bool verbose = false);
 void mpz_mod_fast_reduce(mpz_t r, struct mod_precompute_t *p);
 

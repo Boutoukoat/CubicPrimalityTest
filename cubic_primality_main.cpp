@@ -69,6 +69,7 @@ int main(int argc, char **argv)
     mp_set_memory_functions(cubic_allocate_function, cubic_reallocate_function, cubic_free_function);
 
     bool verbose = false;
+    bool multithread = false;
     for (int i = 1; i < argc; i++)
     {
         if (!strcmp(argv[i], "-st"))
@@ -96,6 +97,11 @@ int main(int argc, char **argv)
             printf("Version 0.2\n");
             exit(0);
         }
+        else if (!strcmp(argv[i], "-mt"))
+        {
+            multithread = true;
+            continue;
+        }
         else if (!strcmp(argv[i], "-v"))
         {
             verbose = true;
@@ -119,9 +125,7 @@ int main(int argc, char **argv)
             // gmp_printf("Test n=%Zd.\n",n);
 
             clock_gettime(CLOCK_REALTIME, &ts1);
-
-            // Get the number of steps. Assuming the Collatz conjecture, it is not an infinite task.
-            bool is_prime = mpz_cubic_primality(n, verbose);
+            bool is_prime = mpz_cubic_primality(n, verbose, multithread);
             clock_gettime(CLOCK_REALTIME, &ts2);
 
             // Display the input number, the number of steps, and the time it took to run it, in milliseconds.
