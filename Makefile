@@ -1,6 +1,6 @@
 
 
-GGG = g++ -O3 -march=native -fomit-frame-pointer -fexpensive-optimizations
+GGG = g++ -Wall -O3 -march=native -fomit-frame-pointer -fexpensive-optimizations
 
 OBJ = cubic_primality_main.o \
       cubic_primality.o \
@@ -33,7 +33,7 @@ bison.gmp_expr.tab.c bison.gmp_expr.tab.h : parser.y
 	bison -d parser.y
 
 lex.gmp_expr.o : lex.gmp_expr.c
-	$(GGG) -c -o lex.gmp_expr.o lex.gmp_expr.c
+	$(GGG) -Wno-unused-function -c -o lex.gmp_expr.o lex.gmp_expr.c
 
 lex.gmp_expr.c : parser.l bison.gmp_expr.tab.h
 	flex parser.l

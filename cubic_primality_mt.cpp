@@ -3,8 +3,8 @@
 #include <pthread.h>
 #include <stdint.h>
 #include <stdio.h>
-#include <unistd.h>
 #include <string.h>
+#include <unistd.h>
 
 #include "cubic_primality_alloc.h"
 #include "cubic_primality_mt.h"
@@ -35,8 +35,8 @@
 #define FLAG_TU_EVEN 0x2000000
 #define FLAG_US_EVEN 0x4000000
 #define FLAG_INIT 0x10000000
-#define FLAG_E    0x80000000
-#define FLAG_END  0x00000000
+#define FLAG_E 0x80000000
+#define FLAG_END 0x00000000
 
 struct mod_multithread_t
 {
@@ -216,13 +216,13 @@ static void *mod_worker(void *arg)
             mpz_add(tmp, mt->s2_odd, mt->st_odd);
             mpz_add(mt->s, tmp, mt->tu_odd);
             mpz_mod_fast_reduce(mt->s, mt->p);
-	    job = FLAG_S;
+            job = FLAG_S;
             break;
         case FLAG_S_EVEN | FLAG_E:
             mpz_add(tmp, mt->s2_even, mt->st_even);
             mpz_add(mt->s, tmp, mt->tu_even);
             mpz_mod_fast_reduce(mt->s, mt->p);
-	    job = FLAG_S;
+            job = FLAG_S;
             break;
         case FLAG_T_ODD | FLAG_E:
             mpz_add(tmp, mt->us_odd, mt->t2_odd);
@@ -231,7 +231,7 @@ static void *mod_worker(void *arg)
             mpz_add(tmp, mt->t, mt->st_odd);
             mpz_add(mt->t, tmp, mt->u2_odd);
             mpz_mod_fast_reduce(mt->t, mt->p);
-	    job = FLAG_T;
+            job = FLAG_T;
             break;
         case FLAG_T_EVEN | FLAG_E:
             mpz_add(tmp, mt->us_even, mt->t2_even);
@@ -240,55 +240,55 @@ static void *mod_worker(void *arg)
             mpz_add(tmp, mt->t, mt->st_even);
             mpz_add(mt->t, tmp, mt->u2_even);
             mpz_mod_fast_reduce(mt->t, mt->p);
-	    job = FLAG_T;
+            job = FLAG_T;
             break;
         case FLAG_U_ODD | FLAG_E:
             mpz_add(tmp, mt->us_odd, mt->t2_odd);
             mpz_add(tmp, tmp, mt->s2_odd);
             mpz_mul_ui(mt->u, tmp, mt->a);
             mpz_mod_fast_reduce(mt->u, mt->p);
-	    job = FLAG_U;
+            job = FLAG_U;
             break;
         case FLAG_U_EVEN | FLAG_E:
             mpz_add(tmp, mt->us_even, mt->t2_even);
             mpz_add(tmp, tmp, mt->s2_even);
             mpz_mul_ui(mt->u, tmp, mt->a);
             mpz_mod_fast_reduce(mt->u, mt->p);
-	    job = FLAG_U;
+            job = FLAG_U;
             break;
         case FLAG_S_ODD:
             mpz_add(tmp, mt->s2_odd, mt->us_odd);
             mpz_add(mt->s, tmp, mt->t2_odd);
             mpz_mod_fast_reduce(mt->s, mt->p);
-	    job = FLAG_S;
+            job = FLAG_S;
             break;
         case FLAG_S_EVEN:
             mpz_add(tmp, mt->s2_even, mt->us_even);
             mpz_add(mt->s, tmp, mt->t2_even);
             mpz_mod_fast_reduce(mt->s, mt->p);
-	    job = FLAG_S;
+            job = FLAG_S;
             break;
         case FLAG_T_ODD:
             mpz_add(tmp, mt->s2_odd, mt->st_odd);
             mpz_add(mt->t, tmp, mt->tu_odd);
             mpz_mod_fast_reduce(mt->t, mt->p);
-	    job = FLAG_T;
+            job = FLAG_T;
             break;
         case FLAG_T_EVEN:
             mpz_add(tmp, mt->s2_even, mt->st_even);
             mpz_add(mt->t, tmp, mt->tu_even);
             mpz_mod_fast_reduce(mt->t, mt->p);
-	    job = FLAG_T;
+            job = FLAG_T;
             break;
         case FLAG_U_ODD:
             mpz_add(mt->u, mt->u2_odd, mt->st_odd);
             mpz_mod_fast_reduce(mt->u, mt->p);
-	    job = FLAG_U;
+            job = FLAG_U;
             break;
         case FLAG_U_EVEN:
             mpz_add(mt->u, mt->u2_even, mt->st_even);
             mpz_mod_fast_reduce(mt->u, mt->p);
-	    job = FLAG_U;
+            job = FLAG_U;
             break;
         case FLAG_INIT:
             // little tweak to initiate the state machine (s, t, u are already computed)
@@ -298,7 +298,7 @@ static void *mod_worker(void *arg)
             break;
         default:
             // cannot happen
-	    printf("Invalid flag %x\n", job);
+            printf("Invalid flag %x\n", job);
             assert(0);
             break;
         }
@@ -319,7 +319,8 @@ static void *mod_worker(void *arg)
 // (This could be done in 9 transitions. But there are extra transitions to avoid
 // delays and to speed up processing)
 //
-void mpz_inner_multithread_exponentiate(mpz_t s, mpz_t t, mpz_t u, mpz_t e, uint64_t a, mod_precompute_t *p, bool verbose)
+void mpz_inner_multithread_exponentiate(mpz_t s, mpz_t t, mpz_t u, mpz_t e, uint64_t a, mod_precompute_t *p,
+                                        bool verbose)
 {
     struct mod_multithread_t *mt =
         (struct mod_multithread_t *)cubic_allocate_function(sizeof(struct mod_multithread_t));
@@ -334,7 +335,7 @@ void mpz_inner_multithread_exponentiate(mpz_t s, mpz_t t, mpz_t u, mpz_t e, uint
 
     if (verbose)
     {
-	    printf("Starting multithread test with %d threads\n", (int)MIN_THREAD_COUNT);
+        printf("Starting multithread test with %d threads\n", (int)MIN_THREAD_COUNT);
     }
 
     // pointer copies
@@ -355,18 +356,18 @@ void mpz_inner_multithread_exponentiate(mpz_t s, mpz_t t, mpz_t u, mpz_t e, uint
     while (true)
     {
         mask = FLAG_TU_EVEN | FLAG_US_EVEN | FLAG_S2_EVEN | FLAG_T2_EVEN | FLAG_ST_EVEN | FLAG_U2_EVEN;
-	if ((flags & mask) == mask)
-	{
-		flags &= ~mask;
-	}
+        if ((flags & mask) == mask)
+        {
+            flags &= ~mask;
+        }
 
         mask = FLAG_TU_ODD | FLAG_US_ODD | FLAG_S2_ODD | FLAG_T2_ODD | FLAG_ST_ODD | FLAG_U2_ODD;
-	if ((flags & mask) == mask)
-	{
-		flags &= ~mask;
-	}
+        if ((flags & mask) == mask)
+        {
+            flags &= ~mask;
+        }
 
-       	result = mod_multithread_get_result(mt);
+        result = mod_multithread_get_result(mt);
         // printf("Flags %8.8x Result %8.8x = %8.8x\n", flags, result, flags | result);
 
         if ((flags & (FLAG_U | FLAG_T)) == (FLAG_U | FLAG_T) && (result & FLAG_S))
@@ -376,20 +377,20 @@ void mpz_inner_multithread_exponentiate(mpz_t s, mpz_t t, mpz_t u, mpz_t e, uint
             flags &= ~(FLAG_S | FLAG_T | FLAG_U);
             flags &= ~(FLAG_S_ODD | FLAG_T_ODD | FLAG_U_ODD);
             flags &= ~(FLAG_S_EVEN | FLAG_T_EVEN | FLAG_U_EVEN);
-	    if (odd)
-	    {
-            mod_multithread_notify_ready(mt, FLAG_ST_ODD);
-            mod_multithread_notify_ready(mt, FLAG_US_ODD);
-            mod_multithread_notify_ready(mt, FLAG_S2_ODD);
-	    }
-	    else
-	    {
-            mod_multithread_notify_ready(mt, FLAG_ST_EVEN);
-            mod_multithread_notify_ready(mt, FLAG_US_EVEN);
-            mod_multithread_notify_ready(mt, FLAG_S2_EVEN);
-	    }
+            if (odd)
+            {
+                mod_multithread_notify_ready(mt, FLAG_ST_ODD);
+                mod_multithread_notify_ready(mt, FLAG_US_ODD);
+                mod_multithread_notify_ready(mt, FLAG_S2_ODD);
+            }
+            else
+            {
+                mod_multithread_notify_ready(mt, FLAG_ST_EVEN);
+                mod_multithread_notify_ready(mt, FLAG_US_EVEN);
+                mod_multithread_notify_ready(mt, FLAG_S2_EVEN);
+            }
             exponent_bit = mpz_tstbit(e, --bit);
-	    odd ^= 1;
+            odd ^= 1;
             continue;
         }
         if ((flags & (FLAG_U | FLAG_S)) == (FLAG_U | FLAG_S) && (result & FLAG_T))
@@ -399,20 +400,20 @@ void mpz_inner_multithread_exponentiate(mpz_t s, mpz_t t, mpz_t u, mpz_t e, uint
             flags &= ~(FLAG_S | FLAG_T | FLAG_U);
             flags &= ~(FLAG_S_ODD | FLAG_T_ODD | FLAG_U_ODD);
             flags &= ~(FLAG_S_EVEN | FLAG_T_EVEN | FLAG_U_EVEN);
-	    if (odd)
-	    {
-            mod_multithread_notify_ready(mt, FLAG_ST_ODD);
-            mod_multithread_notify_ready(mt, FLAG_TU_ODD);
-            mod_multithread_notify_ready(mt, FLAG_T2_ODD);
-	    }
-	    else
-	    {
-            mod_multithread_notify_ready(mt, FLAG_ST_EVEN);
-            mod_multithread_notify_ready(mt, FLAG_TU_EVEN);
-            mod_multithread_notify_ready(mt, FLAG_T2_EVEN);
-	    }
+            if (odd)
+            {
+                mod_multithread_notify_ready(mt, FLAG_ST_ODD);
+                mod_multithread_notify_ready(mt, FLAG_TU_ODD);
+                mod_multithread_notify_ready(mt, FLAG_T2_ODD);
+            }
+            else
+            {
+                mod_multithread_notify_ready(mt, FLAG_ST_EVEN);
+                mod_multithread_notify_ready(mt, FLAG_TU_EVEN);
+                mod_multithread_notify_ready(mt, FLAG_T2_EVEN);
+            }
             exponent_bit = mpz_tstbit(e, --bit);
-	    odd ^= 1;
+            odd ^= 1;
             continue;
         }
         if ((flags & (FLAG_T | FLAG_S)) == (FLAG_S | FLAG_T) && (result & FLAG_U))
@@ -422,20 +423,20 @@ void mpz_inner_multithread_exponentiate(mpz_t s, mpz_t t, mpz_t u, mpz_t e, uint
             flags &= ~(FLAG_S | FLAG_T | FLAG_U);
             flags &= ~(FLAG_S_ODD | FLAG_T_ODD | FLAG_U_ODD);
             flags &= ~(FLAG_S_EVEN | FLAG_T_EVEN | FLAG_U_EVEN);
-	    if (odd)
-	    {
-            mod_multithread_notify_ready(mt, FLAG_US_ODD);
-            mod_multithread_notify_ready(mt, FLAG_TU_ODD);
-            mod_multithread_notify_ready(mt, FLAG_U2_ODD);
-	    }
-	    else
-	    {
-            mod_multithread_notify_ready(mt, FLAG_US_EVEN);
-            mod_multithread_notify_ready(mt, FLAG_TU_EVEN);
-            mod_multithread_notify_ready(mt, FLAG_U2_EVEN);
-	    }
+            if (odd)
+            {
+                mod_multithread_notify_ready(mt, FLAG_US_ODD);
+                mod_multithread_notify_ready(mt, FLAG_TU_ODD);
+                mod_multithread_notify_ready(mt, FLAG_U2_ODD);
+            }
+            else
+            {
+                mod_multithread_notify_ready(mt, FLAG_US_EVEN);
+                mod_multithread_notify_ready(mt, FLAG_TU_EVEN);
+                mod_multithread_notify_ready(mt, FLAG_U2_EVEN);
+            }
             exponent_bit = mpz_tstbit(e, --bit);
-	    odd ^= 1;
+            odd ^= 1;
             continue;
         }
 
@@ -444,16 +445,16 @@ void mpz_inner_multithread_exponentiate(mpz_t s, mpz_t t, mpz_t u, mpz_t e, uint
             flags |= FLAG_S;
             if (bit == 0)
                 continue;
-	    if (odd)
-	    {
-            mod_multithread_notify_ready(mt, FLAG_ST_ODD);
-            mod_multithread_notify_ready(mt, FLAG_S2_ODD);
-	    }
-	    else
-	    {
-            mod_multithread_notify_ready(mt, FLAG_ST_EVEN);
-            mod_multithread_notify_ready(mt, FLAG_S2_EVEN);
-	    }
+            if (odd)
+            {
+                mod_multithread_notify_ready(mt, FLAG_ST_ODD);
+                mod_multithread_notify_ready(mt, FLAG_S2_ODD);
+            }
+            else
+            {
+                mod_multithread_notify_ready(mt, FLAG_ST_EVEN);
+                mod_multithread_notify_ready(mt, FLAG_S2_EVEN);
+            }
             continue;
         }
         if ((flags & (FLAG_U)) == (FLAG_U) && (result & FLAG_S))
@@ -461,16 +462,16 @@ void mpz_inner_multithread_exponentiate(mpz_t s, mpz_t t, mpz_t u, mpz_t e, uint
             flags |= FLAG_S;
             if (bit == 0)
                 continue;
-	    if (odd)
-	    {
-            mod_multithread_notify_ready(mt, FLAG_US_ODD);
-            mod_multithread_notify_ready(mt, FLAG_S2_ODD);
-	    }
-	    else
-	    {
-            mod_multithread_notify_ready(mt, FLAG_US_EVEN);
-            mod_multithread_notify_ready(mt, FLAG_S2_EVEN);
-	    }
+            if (odd)
+            {
+                mod_multithread_notify_ready(mt, FLAG_US_ODD);
+                mod_multithread_notify_ready(mt, FLAG_S2_ODD);
+            }
+            else
+            {
+                mod_multithread_notify_ready(mt, FLAG_US_EVEN);
+                mod_multithread_notify_ready(mt, FLAG_S2_EVEN);
+            }
             continue;
         }
         if ((flags & (FLAG_S)) == (FLAG_S) && (result & FLAG_T))
@@ -478,16 +479,16 @@ void mpz_inner_multithread_exponentiate(mpz_t s, mpz_t t, mpz_t u, mpz_t e, uint
             flags |= FLAG_T;
             if (bit == 0)
                 continue;
-	    if (odd)
-	    {
-            mod_multithread_notify_ready(mt, FLAG_ST_ODD);
-            mod_multithread_notify_ready(mt, FLAG_T2_ODD);
-	    }
-	    else
-	    {
-            mod_multithread_notify_ready(mt, FLAG_ST_EVEN);
-            mod_multithread_notify_ready(mt, FLAG_T2_EVEN);
-	    }
+            if (odd)
+            {
+                mod_multithread_notify_ready(mt, FLAG_ST_ODD);
+                mod_multithread_notify_ready(mt, FLAG_T2_ODD);
+            }
+            else
+            {
+                mod_multithread_notify_ready(mt, FLAG_ST_EVEN);
+                mod_multithread_notify_ready(mt, FLAG_T2_EVEN);
+            }
             continue;
         }
         if ((flags & (FLAG_U)) == (FLAG_U) && (result & FLAG_T))
@@ -495,16 +496,16 @@ void mpz_inner_multithread_exponentiate(mpz_t s, mpz_t t, mpz_t u, mpz_t e, uint
             flags |= FLAG_T;
             if (bit == 0)
                 continue;
-	    if (odd)
-	    {
-            mod_multithread_notify_ready(mt, FLAG_TU_ODD);
-            mod_multithread_notify_ready(mt, FLAG_T2_ODD);
-	    }
-	    else
-	    {
-            mod_multithread_notify_ready(mt, FLAG_TU_EVEN);
-            mod_multithread_notify_ready(mt, FLAG_T2_EVEN);
-	    }
+            if (odd)
+            {
+                mod_multithread_notify_ready(mt, FLAG_TU_ODD);
+                mod_multithread_notify_ready(mt, FLAG_T2_ODD);
+            }
+            else
+            {
+                mod_multithread_notify_ready(mt, FLAG_TU_EVEN);
+                mod_multithread_notify_ready(mt, FLAG_T2_EVEN);
+            }
             continue;
         }
         if ((flags & (FLAG_S)) == (FLAG_S) && (result & FLAG_U))
@@ -512,16 +513,16 @@ void mpz_inner_multithread_exponentiate(mpz_t s, mpz_t t, mpz_t u, mpz_t e, uint
             flags |= FLAG_U;
             if (bit == 0)
                 continue;
-	    if (odd)
-	    {
-            mod_multithread_notify_ready(mt, FLAG_US_ODD);
-            mod_multithread_notify_ready(mt, FLAG_U2_ODD);
-	    }
-	    else
-	    {
-            mod_multithread_notify_ready(mt, FLAG_US_EVEN);
-            mod_multithread_notify_ready(mt, FLAG_U2_EVEN);
-	    }
+            if (odd)
+            {
+                mod_multithread_notify_ready(mt, FLAG_US_ODD);
+                mod_multithread_notify_ready(mt, FLAG_U2_ODD);
+            }
+            else
+            {
+                mod_multithread_notify_ready(mt, FLAG_US_EVEN);
+                mod_multithread_notify_ready(mt, FLAG_U2_EVEN);
+            }
             continue;
         }
         if ((flags & (FLAG_T)) == (FLAG_T) && (result & FLAG_U))
@@ -529,16 +530,16 @@ void mpz_inner_multithread_exponentiate(mpz_t s, mpz_t t, mpz_t u, mpz_t e, uint
             flags |= FLAG_U;
             if (bit == 0)
                 continue;
-	    if (odd)
-	    {
-            mod_multithread_notify_ready(mt, FLAG_TU_ODD);
-            mod_multithread_notify_ready(mt, FLAG_U2_ODD);
-	    }
-	    else
-	    {
-            mod_multithread_notify_ready(mt, FLAG_TU_EVEN);
-            mod_multithread_notify_ready(mt, FLAG_U2_EVEN);
-	    }
+            if (odd)
+            {
+                mod_multithread_notify_ready(mt, FLAG_TU_ODD);
+                mod_multithread_notify_ready(mt, FLAG_U2_ODD);
+            }
+            else
+            {
+                mod_multithread_notify_ready(mt, FLAG_TU_EVEN);
+                mod_multithread_notify_ready(mt, FLAG_U2_EVEN);
+            }
             continue;
         }
         if (result & FLAG_S)
@@ -546,14 +547,14 @@ void mpz_inner_multithread_exponentiate(mpz_t s, mpz_t t, mpz_t u, mpz_t e, uint
             flags |= FLAG_S;
             if (bit == 0)
                 continue;
-	    if (odd)
-	    {
-            mod_multithread_notify_ready(mt, FLAG_S2_ODD);
-	    }
-	    else
-	    {
-            mod_multithread_notify_ready(mt, FLAG_S2_EVEN);
-	    }
+            if (odd)
+            {
+                mod_multithread_notify_ready(mt, FLAG_S2_ODD);
+            }
+            else
+            {
+                mod_multithread_notify_ready(mt, FLAG_S2_EVEN);
+            }
             continue;
         }
         if (result & FLAG_T)
@@ -561,14 +562,14 @@ void mpz_inner_multithread_exponentiate(mpz_t s, mpz_t t, mpz_t u, mpz_t e, uint
             flags |= FLAG_T;
             if (bit == 0)
                 continue;
-	    if (odd)
-	    {
-            mod_multithread_notify_ready(mt, FLAG_T2_ODD);
-	    }
-	    else
-	    {
-            mod_multithread_notify_ready(mt, FLAG_T2_EVEN);
-	    }
+            if (odd)
+            {
+                mod_multithread_notify_ready(mt, FLAG_T2_ODD);
+            }
+            else
+            {
+                mod_multithread_notify_ready(mt, FLAG_T2_EVEN);
+            }
             continue;
         }
         if (result & FLAG_U)
@@ -576,14 +577,14 @@ void mpz_inner_multithread_exponentiate(mpz_t s, mpz_t t, mpz_t u, mpz_t e, uint
             flags |= FLAG_U;
             if (bit == 0)
                 continue;
-	    if (odd)
-	    {
-            mod_multithread_notify_ready(mt, FLAG_U2_ODD);
-	    }
-	    else
-	    {
-            mod_multithread_notify_ready(mt, FLAG_U2_EVEN);
-	    }
+            if (odd)
+            {
+                mod_multithread_notify_ready(mt, FLAG_U2_ODD);
+            }
+            else
+            {
+                mod_multithread_notify_ready(mt, FLAG_U2_EVEN);
+            }
             continue;
         }
 

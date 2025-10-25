@@ -95,18 +95,22 @@ static struct mod_precompute_t *mpz_mod_precompute(mpz_t n, bool verbose = false
     mpz_clears(tmp, 0);
     if (verbose)
     {
-	    if (p->power2pe)
-	    {
-		    printf("Modular reduction optimized for numbers 2^s + e\n");
-	    }
-	    if (p->power2me)
-	    {
-		    printf("Modular reduction optimized for numbers 2^s - e\n");
-	    }
-	    if (p->proth)
-	    {
-		    printf("Modular reduction optimized for numbers e*2^s + 1\n");
-	    }
+        if (p->power2pe)
+        {
+            printf("Modular reduction optimized for numbers 2^s + e\n");
+        }
+        else if (p->power2me)
+        {
+            printf("Modular reduction optimized for numbers 2^s - e\n");
+        }
+        else if (p->proth)
+        {
+            printf("Modular reduction optimized for numbers e*2^s + 1\n");
+        }
+        else
+        {
+            printf("Modular reduction not optimized\n");
+        }
     }
     return p;
 }
@@ -801,7 +805,8 @@ static void mpz_singlethread_exponentiate(mpz_t s, mpz_t t, mpz_t u, mpz_t e, ui
     mpz_clears(s2, t2, u2, st, tu, us, 0);
 }
 
-static void mpz_multithread_exponentiate(mpz_t s, mpz_t t, mpz_t u, mpz_t e, uint64_t a, mod_precompute_t *p, bool verbose = false)
+static void mpz_multithread_exponentiate(mpz_t s, mpz_t t, mpz_t u, mpz_t e, uint64_t a, mod_precompute_t *p,
+                                         bool verbose = false)
 {
     mpz_mod_to_montg(s, p);
     mpz_mod_to_montg(t, p);
@@ -1022,23 +1027,23 @@ bool mpz_cubic_primality(mpz_t n, bool verbose, bool multithread)
             goto done2;
         }
         if (!pcpt)
-	{
+        {
             pcpt = mpz_mod_precompute(n, verbose);
-	}
+        }
         mpz_set_ui(bs, 0);
         mpz_set_ui(bt, 1);
         mpz_set_ui(bu, 0);
         mpz_sub_ui(e, n, 1);
         // if (multithread && p->n > 10000)
         if (multithread)
-	{
-		// multithread version is faster over ~ 10000 bits modulus
-		mpz_multithread_exponentiate(bs, bt, bu, e, a, pcpt, verbose);
-	}
-	else
-	{
-               mpz_singlethread_exponentiate(bs, bt, bu, e, a, pcpt);
-	}
+        {
+            // multithread version is faster over ~ 10000 bits modulus
+            mpz_multithread_exponentiate(bs, bt, bu, e, a, pcpt, verbose);
+        }
+        else
+        {
+            mpz_singlethread_exponentiate(bs, bt, bu, e, a, pcpt);
+        }
         if (mpz_sgn(bs) == 0 && mpz_sgn(bt) == 0 && mpz_cmp_ui(bu, 1) == 0)
         {
             // todo : composite for sure
@@ -1056,7 +1061,9 @@ bool mpz_cubic_primality(mpz_t n, bool verbose, bool multithread)
     mpz_init_set(bu2, bu);
     mpz_set_ui(e, 2);
     if (!pcpt)
+    {
         pcpt = mpz_mod_precompute(n, verbose);
+    }
 
     mpz_singlethread_exponentiate(bs2, bt2, bu2, e, a, pcpt);
     // check the final condition (B^2 + B + 1) == (-1, 1, a)
@@ -1250,86 +1257,86 @@ void cubic_primality_self_test(void)
     // ---------------------------------------------------------------------------------
     while (1)
     {
-    printf("Multithread correctness\n");
-    mpz_t s1, t1, u1, e;
-    mpz_t s2, t2, u2;
-    mpz_inits(s1, t1, u1, e, s2, t2, u2, 0);
-    mpz_set_ui(ma, 0x18003);
-    p = mpz_mod_precompute(ma);
-    a = 101;
-    mpz_set_ui(e, 0xa0f5);
-    mpz_set_ui(s1, 1);
-    mpz_set_ui(t1, 2);
-    mpz_set_ui(u1, 3);
-    mpz_set(s2, s1);
-    mpz_set(t2, t1);
-    mpz_set(u2, u1);
-    gmp_printf("s %5Zx t %5Zx u %5Zx e %8Zx a %lu special %d\n", s1, t1, u1, e, a, p->special_case);
-    mpz_singlethread_exponentiate(s1, t1, u1, e, a, p);
-    mpz_multithread_exponentiate(s2, t2, u2, e, a, p);
-    gmp_printf("s1 %5.5Zx t1 %5.5Zx u1 %5.5Zx\n", s1, t1, u1);
-    gmp_printf("s2 %5.5Zx t2 %5.5Zx u2 %5.5Zx\n", s2, t2, u2);
-    assert(mpz_cmp(s1, s2) == 0);
-    assert(mpz_cmp(t1, t2) == 0);
-    assert(mpz_cmp(u1, u2) == 0);
-    mpz_clears(s1, t1, u1, e, s2, t2, u2, 0);
-    mpz_mod_uncompute(p);
+        printf("Multithread correctness\n");
+        mpz_t s1, t1, u1, e;
+        mpz_t s2, t2, u2;
+        mpz_inits(s1, t1, u1, e, s2, t2, u2, 0);
+        mpz_set_ui(ma, 0x18003);
+        p = mpz_mod_precompute(ma);
+        a = 101;
+        mpz_set_ui(e, 0xa0f5);
+        mpz_set_ui(s1, 1);
+        mpz_set_ui(t1, 2);
+        mpz_set_ui(u1, 3);
+        mpz_set(s2, s1);
+        mpz_set(t2, t1);
+        mpz_set(u2, u1);
+        gmp_printf("s %5Zx t %5Zx u %5Zx e %8Zx a %lu special %d\n", s1, t1, u1, e, a, p->special_case);
+        mpz_singlethread_exponentiate(s1, t1, u1, e, a, p);
+        mpz_multithread_exponentiate(s2, t2, u2, e, a, p);
+        gmp_printf("s1 %5.5Zx t1 %5.5Zx u1 %5.5Zx\n", s1, t1, u1);
+        gmp_printf("s2 %5.5Zx t2 %5.5Zx u2 %5.5Zx\n", s2, t2, u2);
+        assert(mpz_cmp(s1, s2) == 0);
+        assert(mpz_cmp(t1, t2) == 0);
+        assert(mpz_cmp(u1, u2) == 0);
+        mpz_clears(s1, t1, u1, e, s2, t2, u2, 0);
+        mpz_mod_uncompute(p);
 
-    mpz_inits(s1, t1, u1, e, s2, t2, u2, 0);
-    mpz_set_ui(ma, 1);
-    mpz_mul_2exp(ma, ma, 256);
-    mpz_sub_ui(ma, ma, 1);
-    mpz_mul_ui(ma, ma, 3);
-    mpz_add_ui(ma, ma, 56);
+        mpz_inits(s1, t1, u1, e, s2, t2, u2, 0);
+        mpz_set_ui(ma, 1);
+        mpz_mul_2exp(ma, ma, 256);
+        mpz_sub_ui(ma, ma, 1);
+        mpz_mul_ui(ma, ma, 3);
+        mpz_add_ui(ma, ma, 56);
 
-    p = mpz_mod_precompute(ma);
-    a = 103; 
-    mpz_set_ui(e, 0xdeadbeef);
-    mpz_set_ui(s1, 1);
-    mpz_set_ui(t1, 2);
-    mpz_set_ui(u1, 3);
-    mpz_set(s2, s1);
-    mpz_set(t2, t1);
-    mpz_set(u2, u1);
-    gmp_printf("s %5Zx t %5Zx u %5Zx e %8Zx a %lu special %d\n", s1, t1, u1, e, a, p->special_case);
-    mpz_singlethread_exponentiate(s1, t1, u1, e, a, p);
-    mpz_multithread_exponentiate(s2, t2, u2, e, a, p);
-    gmp_printf("s1 %5.5Zx t1 %5.5Zx u1 %5.5Zx\n", s1, t1, u1);
-    gmp_printf("s2 %5.5Zx t2 %5.5Zx u2 %5.5Zx\n", s2, t2, u2);
-    assert(mpz_cmp(s1, s2) == 0);
-    assert(mpz_cmp(t1, t2) == 0);
-    assert(mpz_cmp(u1, u2) == 0);
-    mpz_clears(s1, t1, u1, e, s2, t2, u2, 0);
-    mpz_mod_uncompute(p);
+        p = mpz_mod_precompute(ma);
+        a = 103;
+        mpz_set_ui(e, 0xdeadbeef);
+        mpz_set_ui(s1, 1);
+        mpz_set_ui(t1, 2);
+        mpz_set_ui(u1, 3);
+        mpz_set(s2, s1);
+        mpz_set(t2, t1);
+        mpz_set(u2, u1);
+        gmp_printf("s %5Zx t %5Zx u %5Zx e %8Zx a %lu special %d\n", s1, t1, u1, e, a, p->special_case);
+        mpz_singlethread_exponentiate(s1, t1, u1, e, a, p);
+        mpz_multithread_exponentiate(s2, t2, u2, e, a, p);
+        gmp_printf("s1 %5.5Zx t1 %5.5Zx u1 %5.5Zx\n", s1, t1, u1);
+        gmp_printf("s2 %5.5Zx t2 %5.5Zx u2 %5.5Zx\n", s2, t2, u2);
+        assert(mpz_cmp(s1, s2) == 0);
+        assert(mpz_cmp(t1, t2) == 0);
+        assert(mpz_cmp(u1, u2) == 0);
+        mpz_clears(s1, t1, u1, e, s2, t2, u2, 0);
+        mpz_mod_uncompute(p);
 
-    mpz_inits(s1, t1, u1, e, s2, t2, u2, 0);
-    mpz_set_ui(ma, 1);
-    mpz_mul_2exp(ma, ma, 521);
-    mpz_sub_ui(ma, ma, 1);
-    // 2^512-2^32+1
-    mpz_set_ui(ma, 1);
-    mpz_mul_2exp(ma, ma, 512);
-    mpz_sub_ui(ma, ma, (1ull << 32)-1);
+        mpz_inits(s1, t1, u1, e, s2, t2, u2, 0);
+        mpz_set_ui(ma, 1);
+        mpz_mul_2exp(ma, ma, 521);
+        mpz_sub_ui(ma, ma, 1);
+        // 2^512-2^32+1
+        mpz_set_ui(ma, 1);
+        mpz_mul_2exp(ma, ma, 512);
+        mpz_sub_ui(ma, ma, (1ull << 32) - 1);
 
-    p = mpz_mod_precompute(ma);
-    a = 4423;
-    mpz_set_ui(e, 0xf0e1a5c3);
-    mpz_set_ui(s1, 1);
-    mpz_set_ui(t1, 2);
-    mpz_set_ui(u1, 3);
-    mpz_set(s2, s1);
-    mpz_set(t2, t1);
-    mpz_set(u2, u1);
-    gmp_printf("s %5Zx t %5Zx u %5Zx e %8Zx a %lu special %d\n", s1, t1, u1, e, a, p->special_case);
-    mpz_singlethread_exponentiate(s1, t1, u1, e, a, p);
-    mpz_multithread_exponentiate(s2, t2, u2, e, a, p);
-    gmp_printf("s1 %5.5Zx t1 %5.5Zx u1 %5.5Zx\n", s1, t1, u1);
-    gmp_printf("s2 %5.5Zx t2 %5.5Zx u2 %5.5Zx\n", s2, t2, u2);
-    assert(mpz_cmp(s1, s2) == 0);
-    assert(mpz_cmp(t1, t2) == 0);
-    assert(mpz_cmp(u1, u2) == 0);
-    mpz_clears(s1, t1, u1, e, s2, t2, u2, 0);
-    mpz_mod_uncompute(p);
+        p = mpz_mod_precompute(ma);
+        a = 4423;
+        mpz_set_ui(e, 0xf0e1a5c3);
+        mpz_set_ui(s1, 1);
+        mpz_set_ui(t1, 2);
+        mpz_set_ui(u1, 3);
+        mpz_set(s2, s1);
+        mpz_set(t2, t1);
+        mpz_set(u2, u1);
+        gmp_printf("s %5Zx t %5Zx u %5Zx e %8Zx a %lu special %d\n", s1, t1, u1, e, a, p->special_case);
+        mpz_singlethread_exponentiate(s1, t1, u1, e, a, p);
+        mpz_multithread_exponentiate(s2, t2, u2, e, a, p);
+        gmp_printf("s1 %5.5Zx t1 %5.5Zx u1 %5.5Zx\n", s1, t1, u1);
+        gmp_printf("s2 %5.5Zx t2 %5.5Zx u2 %5.5Zx\n", s2, t2, u2);
+        assert(mpz_cmp(s1, s2) == 0);
+        assert(mpz_cmp(t1, t2) == 0);
+        assert(mpz_cmp(u1, u2) == 0);
+        mpz_clears(s1, t1, u1, e, s2, t2, u2, 0);
+        mpz_mod_uncompute(p);
     }
     p = 0;
 
@@ -1365,12 +1372,12 @@ void cubic_primality_self_test(void)
         mpz_init_set_ui(ma, 1);
         mpz_mul_2exp(ma, ma, j);
         mpz_add_ui(ma, ma, smallq[j]);
-	bool res = mpz_cubic_primality(ma);
-	if (!res)
-	{
-		printf("%d %d\n", (int)j, (int) smallq[j]);
-                assert(res == true);
-	}
+        bool res = mpz_cubic_primality(ma);
+        if (!res)
+        {
+            printf("%d %d\n", (int)j, (int)smallq[j]);
+            assert(res == true);
+        }
     }
 
     // ---------------------------------------------------------------------------------
@@ -1384,12 +1391,12 @@ void cubic_primality_self_test(void)
         mpz_mul_2exp(ma, ma, 127);
         mpz_sub_ui(ma, ma, 1);
         mpz_mul_ui(ma, ma, smallp[j]);
-	bool res = mpz_cubic_primality(ma);
-	if (res)
-	{
-		printf("%d %d\n", (int)j, (int) smallp[j]);
-                assert(res == false);
-	}
+        bool res = mpz_cubic_primality(ma);
+        if (res)
+        {
+            printf("%d %d\n", (int)j, (int)smallp[j]);
+            assert(res == false);
+        }
     }
 
     // ---------------------------------------------------------------------------------
