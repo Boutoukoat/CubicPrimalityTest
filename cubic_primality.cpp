@@ -70,7 +70,7 @@ static struct mod_precompute_t *mpz_mod_precompute(mpz_t n, bool verbose = false
             // the least significant half of the number is 0x0001....1
             // precompute the most significant part of the number
             mpz_div_2exp(p->b, n, p->n2);
-            p->n32 = p->n + p->n2;
+            p->n32 = p->n + (p->n >> 1);
             mpz_set_ui(tmp, 1);
             mpz_mul_2exp(tmp, tmp, p->n32);
             mpz_mod(p->a, tmp, n);
