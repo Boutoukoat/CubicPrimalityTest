@@ -528,7 +528,7 @@ void int128_gcdext(uint128_t a, uint128_t b, int128_t &ea, int128_t &eb, uint128
 // returns the output string length.
 unsigned uint128_sprint(char *ptr, uint128_t x)
 {
-    char buff[32];
+    char buff[256];
     char *pb = buff;
     char *pt = ptr;
 
@@ -543,7 +543,7 @@ unsigned uint128_sprint(char *ptr, uint128_t x)
     }
     while (pb > buff)
     {
-        *pt++ = *(--pb);
+        *(pt++) = *(--pb);
     }
     *pt = 0;
     return pt - ptr;
@@ -559,8 +559,15 @@ void self_tests(void)
 	assert(eg == 3);
 
 	char b[128];
-	uint128_sprint(b, 123456);
+	unsigned u;
+	u = uint128_sprint(b, 123456);
 	assert(strcmp(b, "123456") == 0);
+	assert(u = strlen(b));
+	assert(u = 10);
+	u = uint128_sprint(b, 98765432109876543ull);
+	assert(strcmp(b, "98765432109876543") == 0);
+	assert(u = strlen(b));
+	assert(u = 17);
 }
 
 int main(int argc, char **argv)
@@ -582,8 +589,8 @@ int main(int argc, char **argv)
             l_max = strtoull(argv[++i], 0, 0);
             continue;
         }
-        printf("-p : maximum prime to search for\n");
-        printf("-l : display interval\n");
+        printf("-p : maximum prime to search for < 10^12 approx\n");
+        printf("-l : display interval e.g. 10000\n");
     }
 
     time_t t0 = time(NULL);
@@ -593,9 +600,10 @@ int main(int argc, char **argv)
     {
         if (uint64_is_prime(p))
         {
+		// display some progress from time to time
             if (p >= l)
             {
-                char buff[128];
+                char buff[256];
                 char *ptr = buff;
                 time_t t1 = time(NULL);
                 *ptr++ = '[';
@@ -618,30 +626,39 @@ int main(int argc, char **argv)
                 {
                     continue;
                 }
-                uint128_t q3 = (uint128_t)q * q * q;
-                int128_t ep, eq, e;
-		uint128_t eg;
 
                 // extended euclidean algorithm
                 // ep * p^3 + eq * q^3 = eg
                 //
                 // todo : investigate gcd(p^3, q^3) = gcd(p, q)^3
                 //
+                uint128_t q3 = (uint128_t)q * q * q;
+                int128_t ep, eq, e;
+		uint128_t eg;
                 int128_gcdext(p3, q3, ep, eq, eg);
 
                 e = ep + eq;
                 if (e < 0)
+		{
                     e = p3 - 1 - e;
+		}
                 e %= p3 - 1;
                 if (e == 1)
                 {
-                    char buff[128];
+                    char buff[256];
                     char *ptr = buff;
+                    ptr += uint128_sprint(ptr, p);
+                    *ptr++ = ' ';
+                    ptr += uint128_sprint(ptr, q);
+                    *ptr++ = ' ';
+                    *ptr++ = '[';
                     ptr += uint128_sprint(ptr, ep);
                     *ptr++ = ',';
                     ptr += uint128_sprint(ptr, eq);
                     *ptr++ = ',';
                     ptr += uint128_sprint(ptr, eg);
+                    *ptr++ = ']';
+		    *ptr = 0;
                     printf("%s\n", buff);
                     fflush(stdout);
                 }
