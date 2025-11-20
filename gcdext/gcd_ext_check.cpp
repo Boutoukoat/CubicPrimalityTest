@@ -558,6 +558,11 @@ void self_tests(void)
 	assert(eb == 1);
 	assert(eg == 3);
 
+	int128_gcdext(101*101*101, 103*103*103, ea, eb, eg);
+	assert(ea == 407764);
+	assert(eb == -384469);
+	assert(eg == 1);
+
 	char b[128];
 	unsigned u;
 	u = uint128_sprint(b, 123456);
@@ -596,7 +601,7 @@ int main(int argc, char **argv)
     time_t t0 = time(NULL);
     uint64_t l = l_max;
     // iterate on multiples of 6k+/-1
-    for (uint64_t p = 7, dp = 2; p < p_max; p += dp, dp = 6 - dp)
+    for (uint64_t p = 7, dp = 4; p < p_max; p += dp, dp = 6 - dp)
     {
         if (uint64_is_prime(p))
         {
