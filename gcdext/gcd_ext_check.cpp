@@ -1,7 +1,7 @@
 // -----------------------------------------------------------------------
 // verify details of the cubic test
 //
-// {gettime();l=10000;forprime(p=7,1000000000,if(p>l,print([l,gettime()]);l+=10000);
+// {gettime();l=10000;forprime(p=7,1000000000,if(p>l,print([p,gettime()]);l+=10000);
 // forstep(Q=5,p-1,2,if(Q%3!=0,e=gcdext(p^3,Q^3);if((e[1]+e[2])%(p^3-1)==1,print([p,q,e])))));}
 //
 // -----------------------------------------------------------------------
@@ -225,7 +225,7 @@ static int uint64_jacobi(uint64_t x, uint64_t y)
 }
 
 // return smallest factor of n < 157, or 1 if none is found.
-uint64_t small_factor(uint64_t n)
+uint64_t uint64_small_factor(uint64_t n)
 {
     if (n <= 152)
     {
@@ -603,7 +603,7 @@ int main(int argc, char **argv)
     // iterate on multiples of 6k+/-1
     for (uint64_t p = 7, dp = 4; p < p_max; p += dp, dp = 6 - dp)
     {
-        if (uint64_is_prime(p))
+        if (uint64_small_factor(p) == 1 && uint64_is_prime(p))
         {
 		// display some progress from time to time
             if (p >= l)
