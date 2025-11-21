@@ -8,6 +8,7 @@
 
 #include <assert.h>
 #include <math.h>
+#include <omp.h>
 #include <stdint.h>
 #include <stdio.h>
 #include <string.h>
@@ -617,6 +618,12 @@ void int128_gcdext(uint128_t a, uint128_t b, int128_t &ea, int128_t &eb, uint128
         if ((u & 1) == 0)
         {
             u >>= 1;
+#if 0
+	    uint64_t lsb = ((uint64_t)x1 | (uint64_t)y1 ) & 1;
+	    x1 = (x1 + (lsb ? bb : 0)) >> 1;
+	    y1 = (y1 - (lsb ? aa : 0)) >> 1;
+            continue;
+#endif
             if (((x1 | y1) & 1) == 0)
             {
                 x1 >>= 1;
@@ -632,6 +639,12 @@ void int128_gcdext(uint128_t a, uint128_t b, int128_t &ea, int128_t &eb, uint128
         if ((v & 1) == 0)
         {
             v >>= 1;
+#if 0
+	    uint64_t lsb = ((uint64_t)x2 | (uint64_t)y2 ) & 1;
+	    x2 = (x2 + (lsb ? bb : 0)) >> 1;
+	    y2 = (y2 - (lsb ? aa : 0)) >> 1;
+            continue;
+#endif
             if (((x2 | y2) & 1) == 0)
             {
                 x2 >>= 1;
@@ -839,14 +852,19 @@ int main(int argc, char **argv)
     }
 
     time_t t0 = time(NULL);
+    p_max = (p_max + 2) / 3;
     uint64_t l = l_max;
-    // iterate on multiples of 6k+/-1
-    for (uint64_t p = 7, dp = 4; p < p_max; p += dp, dp = 6 - dp)
+
+#pragma omp parallel for shared(l, t0)
+    for (uint64_t i = 2; i < p_max; i++)
     {
+        // iterate on multiples of 6k+/-1
+        uint64_t p = 6 * (i >> 1) + ((i & 1) ? 5 : 1);
+
         if (uint64_small_factor(p) == 1 && uint64_is_prime(p))
         {
             // display some progress from time to time
-            if (p >= l)
+            if (p > l)
             {
                 char buff[256];
                 char *ptr = buff;
@@ -857,12 +875,14 @@ int main(int argc, char **argv)
                 ptr += uint128_sprint(ptr, t1 - t0);
                 *ptr++ = ']';
                 *ptr = 0;
-                printf("%s\n", buff);
-                fflush(stdout);
-                t0 = t1;
-                l += l_max;
+#pragma omp critical
+                {
+                    printf("%s\n", buff);
+                    fflush(stdout);
+                    t0 = t1;
+                    l += l_max;
+                }
             }
-
             uint128_t p3 = (uint128_t)p * p * p;
             for (uint64_t q = 5; q < p - 1; q += 2)
             {
@@ -904,8 +924,11 @@ int main(int argc, char **argv)
                     ptr += uint128_sprint(ptr, eg);
                     *ptr++ = ']';
                     *ptr = 0;
-                    printf("%s\n", buff);
-                    fflush(stdout);
+#pragma omp critical
+                    {
+                        printf("%s\n", buff);
+                        fflush(stdout);
+                    }
                 }
             }
         }
