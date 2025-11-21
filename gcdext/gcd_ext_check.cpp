@@ -7,10 +7,10 @@
 // -----------------------------------------------------------------------
 
 #include <assert.h>
+#include <math.h>
 #include <stdint.h>
 #include <stdio.h>
 #include <string.h>
-#include <math.h>
 #include <time.h>
 
 typedef unsigned __int128 uint128_t;
@@ -108,6 +108,18 @@ static inline uint64_t uint64_tzcnt(uint64_t a)
 #else
     return __builtin_ctzll(a);
 #endif
+}
+
+// count trailing zeroed bits
+static inline uint64_t uint128_tzcnt(uint128_t a)
+{
+    uint64_t t = (uint64_t)a;
+    if (t)
+    {
+        return uint64_tzcnt(t);
+    }
+    t = (a >> 64);
+    return 64 + uint64_tzcnt(t);
 }
 
 // simple floor(log_2) function
@@ -492,38 +504,6 @@ uint64_t mod_inv(uint64_t x, uint64_t m)
     return b == 1 ? v : 0;
 }
 
-// miserably slow textbook version of Extended Euclidean algorithm
-void int128_gcdext(uint128_t a, uint128_t b, int128_t &ea, int128_t &eb, uint128_t &eg)
-{
-    int128_t r_prev = a;
-    int128_t r_next = b;
-    int128_t s_prev = 1;
-    int128_t s_next = 0;
-    int128_t t_prev = 0;
-    int128_t t_next = 1;
-    int128_t q, tmp;
-
-    while( r_next != 0 )
-    {
-        q = r_prev / r_next;
-
-	tmp = r_prev - q * r_next;
-	r_prev = r_next;
-	r_next = tmp;
-
-	tmp = s_prev - q * s_next;
-	s_prev = s_next;
-	s_next = tmp;
-
-	tmp = t_prev - q * t_next;
-	t_prev = t_next;
-	t_next = tmp;
-    }
-    eg = r_prev;
-    ea = s_prev;
-    eb = t_prev;
-}
-
 // conversion of a large number into a basis-10 string.
 // returns the output string length.
 unsigned uint128_sprint(char *ptr, uint128_t x)
@@ -549,30 +529,289 @@ unsigned uint128_sprint(char *ptr, uint128_t x)
     return pt - ptr;
 }
 
+unsigned int128_sprint(char *ptr, int128_t x)
+{
+    char *pt = ptr;
+
+    if (x < 0)
+    {
+        x = -x;
+        *pt++ = '-';
+    }
+    pt += uint128_sprint(pt, x);
+    return pt - ptr;
+}
+
+// miserably slow textbook version of Extended Euclidean algorithm
+void int128_simple_gcdext(uint128_t a, uint128_t b, int128_t &ea, int128_t &eb, uint128_t &eg)
+{
+    int128_t r_prev = a;
+    int128_t r_next = b;
+    int128_t s_prev = 1;
+    int128_t s_next = 0;
+    int128_t t_prev = 0;
+    int128_t t_next = 1;
+    int128_t q, tmp;
+
+    while (r_next != 0)
+    {
+        q = r_prev / r_next;
+
+        tmp = r_prev - q * r_next;
+        r_prev = r_next;
+        r_next = tmp;
+
+        tmp = s_prev - q * s_next;
+        s_prev = s_next;
+        s_next = tmp;
+
+        tmp = t_prev - q * t_next;
+        t_prev = t_next;
+        t_next = tmp;
+    }
+    eg = r_prev;
+    ea = s_prev;
+    eb = t_prev;
+}
+
+// Extended Euclidean algorithm  (binary)
+// with normalization step
+void int128_gcdext(uint128_t a, uint128_t b, int128_t &ea, int128_t &eb, uint128_t &eg)
+{
+    // trivial and corner cases
+    if (a == 0)
+    {
+        ea = 0;
+        eb = b ? 1 : 0;
+        eg = b;
+        return;
+    }
+
+    if (b == 0)
+    {
+        ea = a ? 1 : 0;
+        eb = 0;
+        eg = a;
+        return;
+    }
+
+    // strip common factor 2
+    unsigned shift = uint128_tzcnt(a | b);
+    int128_t aa = a >> shift;
+    int128_t bb = b >> shift;
+
+    // Bézout coefficients
+    int128_t u = aa;
+    int128_t v = bb;
+
+    // Bézout coefficients
+    int128_t x1 = 1;
+    int128_t y1 = 0;
+
+    // Bézout coefficients
+    int128_t x2 = 0;
+    int128_t y2 = 1;
+
+    while (u != v)
+    {
+        if ((u & 1) == 0)
+        {
+            u >>= 1;
+            if (((x1 | y1) & 1) == 0)
+            {
+                x1 >>= 1;
+                y1 >>= 1;
+            }
+            else
+            {
+                x1 = (x1 + bb) >> 1;
+                y1 = (y1 - aa) >> 1;
+            }
+            continue;
+        }
+        if ((v & 1) == 0)
+        {
+            v >>= 1;
+            if (((x2 | y2) & 1) == 0)
+            {
+                x2 >>= 1;
+                y2 >>= 1;
+            }
+            else
+            {
+                x2 = (x2 + bb) >> 1;
+                y2 = (y2 - aa) >> 1;
+            }
+            continue;
+        }
+        if (u > v)
+        {
+            u -= v;
+            x1 -= x2;
+            y1 -= y2;
+        }
+        else
+        {
+            v -= u;
+            x2 -= x1;
+            y2 -= y1;
+        }
+    }
+
+    eg = u << shift;
+    ea = x1;
+    eb = y1;
+
+    //    assert(ea * a + eb * b == eg);
+
+    // normalize the solution
+    int128_t bg = b / eg;
+    int128_t ag = a / eg;
+
+    // Compute k to shift along the Bézout lattice
+    // 0 <= x + k*(b/g) < |b/g|
+    int128_t k = ea / bg;
+    ea -= k * bg;
+    eb += k * ag;
+    if (ea < 0)
+    {
+        ea += bg;
+        eb -= ag;
+    }
+
+#if 0
+    char buf[128];
+    int128_sprint(buf, a);
+    printf("%s * ", buf);
+    int128_sprint(buf, ea);
+    printf("%s + ", buf);
+    int128_sprint(buf, b);
+    printf("%s * ", buf);
+    int128_sprint(buf, eb);
+    printf("%s = ", buf);
+    int128_sprint(buf, eg);
+    printf("%s\n", buf);
+
+    assert(ea * a + eb * b == eg);
+#endif
+}
+
 void self_tests(void)
 {
-	int128_t ea, eb;
-	uint128_t eg;
-	int128_gcdext(12, 15, ea, eb, eg);
-	assert(ea == -1);
-	assert(eb == 1);
-	assert(eg == 3);
+    char b[128];
+    unsigned u;
+    u = uint128_sprint(b, 123456);
+    assert(strcmp(b, "123456") == 0);
+    assert(u = strlen(b));
+    assert(u = 10);
+    u = uint128_sprint(b, 98765432109876543ull);
+    assert(strcmp(b, "98765432109876543") == 0);
+    assert(u = strlen(b));
+    assert(u = 17);
 
-	int128_gcdext(101*101*101, 103*103*103, ea, eb, eg);
-	assert(ea == 407764);
-	assert(eb == -384469);
-	assert(eg == 1);
+    int128_t ea, eb;
+    uint128_t eg;
+    int128_gcdext(0, 0, ea, eb, eg);
+    assert(ea == 0 && eb == 0);
+    assert(eg == 0);
+    int128_gcdext(0, 1, ea, eb, eg);
+    assert(ea == 0);
+    assert(eb == 1);
+    assert(eg == 1);
+    int128_gcdext(0, 2, ea, eb, eg);
+    assert(ea == 0);
+    assert(eb == 1);
+    assert(eg == 2);
+    int128_gcdext(0, 103, ea, eb, eg);
+    assert(ea == 0);
+    assert(eb == 1);
+    assert(eg == 103);
+    int128_gcdext(0, 104, ea, eb, eg);
+    assert(ea == 0);
+    assert(eb == 1);
+    assert(eg == 104);
+    int128_gcdext(1, 0, ea, eb, eg);
+    assert(ea == 1);
+    assert(eb == 0);
+    assert(eg == 1);
+    int128_gcdext(2, 0, ea, eb, eg);
+    assert(ea == 1);
+    assert(eb == 0);
+    assert(eg == 2);
+    int128_gcdext(103, 0, ea, eb, eg);
+    assert(ea == 1);
+    assert(eb == 0);
+    assert(eg == 103);
+    int128_gcdext(104, 0, ea, eb, eg);
+    assert(ea == 1);
+    assert(eb == 0);
+    assert(eg == 104);
+    int128_gcdext(1, 1, ea, eb, eg);
+    assert((ea == 0) ^ (eb == 0));
+    assert((ea == 1) ^ (eb == 1));
+    assert(eg == 1);
+    int128_gcdext(1, 2, ea, eb, eg);
+    assert(ea == 1);
+    assert(eb == 0);
+    assert(eg == 1);
+    int128_gcdext(1, 103, ea, eb, eg);
+    assert(ea == 1);
+    assert(eb == 0);
+    assert(eg == 1);
+    int128_gcdext(1, 104, ea, eb, eg);
+    assert(ea == 1);
+    assert(eb == 0);
+    assert(eg == 1);
+    int128_gcdext(2, 1, ea, eb, eg);
+    assert(ea == 0);
+    assert(eb == 1);
+    assert(eg == 1);
+    int128_gcdext(103, 1, ea, eb, eg);
+    assert(ea == 0);
+    assert(eb == 1);
+    assert(eg == 1);
+    int128_gcdext(104, 1, ea, eb, eg);
+    assert(ea == 0);
+    assert(eb == 1);
+    assert(eg == 1);
+    int128_gcdext(2, 2, ea, eb, eg);
+    assert((ea == 0) ^ (eb == 0));
+    assert((ea == 1) ^ (eb == 1));
+    assert(eg == 2);
+    int128_gcdext(2, 103, ea, eb, eg);
+    assert(ea == 52);
+    assert(eb == -1);
+    assert(eg == 1);
+    int128_gcdext(2, 104, ea, eb, eg);
+    assert(ea == 1);
+    assert(eb == 0);
+    assert(eg == 2);
+    int128_gcdext(103, 2, ea, eb, eg);
+    assert(ea == 1);
+    assert(eb == -51);
+    assert(eg == 1);
+    int128_gcdext(104, 2, ea, eb, eg);
+    assert(ea == 0);
+    assert(eb == 1);
+    assert(eg == 2);
 
-	char b[128];
-	unsigned u;
-	u = uint128_sprint(b, 123456);
-	assert(strcmp(b, "123456") == 0);
-	assert(u = strlen(b));
-	assert(u = 10);
-	u = uint128_sprint(b, 98765432109876543ull);
-	assert(strcmp(b, "98765432109876543") == 0);
-	assert(u = strlen(b));
-	assert(u = 17);
+    int128_gcdext(12, 15, ea, eb, eg);
+#if 0
+    int128_sprint(b, ea);
+    printf("%s\n", b);
+    int128_sprint(b, eb);
+    printf("%s\n", b);
+    uint128_sprint(b, eg);
+    printf("%s\n", b);
+#endif
+    assert(ea == 4);
+    assert(eb == -3);
+    assert(eg == 3);
+
+    int128_gcdext(101 * 101 * 101, 103 * 103 * 103, ea, eb, eg);
+    assert(ea == 407764);
+    assert(eb == -384469);
+    assert(eg == 1);
 }
 
 int main(int argc, char **argv)
@@ -580,6 +819,7 @@ int main(int argc, char **argv)
     uint64_t p_max = 1ull << 21;
     uint64_t l_max = 10000;
 
+    // quick sanity check
     self_tests();
 
     for (int i = 1; i < argc; i++)
@@ -605,7 +845,7 @@ int main(int argc, char **argv)
     {
         if (uint64_small_factor(p) == 1 && uint64_is_prime(p))
         {
-		// display some progress from time to time
+            // display some progress from time to time
             if (p >= l)
             {
                 char buff[256];
@@ -620,7 +860,7 @@ int main(int argc, char **argv)
                 printf("%s\n", buff);
                 fflush(stdout);
                 t0 = t1;
-		l += l_max;
+                l += l_max;
             }
 
             uint128_t p3 = (uint128_t)p * p * p;
@@ -639,14 +879,14 @@ int main(int argc, char **argv)
                 //
                 uint128_t q3 = (uint128_t)q * q * q;
                 int128_t ep, eq, e;
-		uint128_t eg;
+                uint128_t eg;
                 int128_gcdext(p3, q3, ep, eq, eg);
 
                 e = ep + eq;
                 if (e < 0)
-		{
+                {
                     e = p3 - 1 - e;
-		}
+                }
                 e %= p3 - 1;
                 if (e == 1)
                 {
@@ -657,13 +897,13 @@ int main(int argc, char **argv)
                     ptr += uint128_sprint(ptr, q);
                     *ptr++ = ' ';
                     *ptr++ = '[';
-                    ptr += uint128_sprint(ptr, ep);
+                    ptr += int128_sprint(ptr, ep);
                     *ptr++ = ',';
-                    ptr += uint128_sprint(ptr, eq);
+                    ptr += int128_sprint(ptr, eq);
                     *ptr++ = ',';
                     ptr += uint128_sprint(ptr, eg);
                     *ptr++ = ']';
-		    *ptr = 0;
+                    *ptr = 0;
                     printf("%s\n", buff);
                     fflush(stdout);
                 }
