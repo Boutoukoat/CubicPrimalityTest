@@ -1252,9 +1252,14 @@ int main(int argc, char **argv)
             }
         }
 
-        // next p, not a multiple of 3, not a multiple of 2
+        // next p, not a multiple of 3, not a multiple of 2, and prime
+	do
+	{
         p += dp;
         dp = 6 - dp;
+	}
+	while (uint64_small_factor(p) != 1 || !uint64_is_prime(p));
+
         // first Q >= p, not a multiple of 3, not a multiple of 2
         Q = p;
         dq = dp;
