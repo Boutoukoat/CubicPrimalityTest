@@ -13,17 +13,31 @@
 //
 // -----------------------------------------------------------------------
 
+#include <algorithm>
 #include <assert.h>
+#include <ctype.h>
+#include <math.h>
 #include <omp.h>
 #include <stdint.h>
 #include <stdio.h>
 #include <string.h>
-#include <ctype.h>
 #include <time.h>
-#include <math.h>
+#include <vector>
+
+#include <x86intrin.h>
+
+using namespace std;
 
 typedef unsigned __int128 uint128_t;
 typedef signed __int128 int128_t;
+
+// randomness generation with period 2^64
+uint64_t rnd(void)
+{
+    static uint64_t s = 0x1234567890123456ull;
+    s = s * 137 + 13;
+    return (s >> 13) ^ (s << 13) ^ s;
+}
 
 // (u + v) mod n
 // Assume u+v < 2*n
@@ -84,6 +98,33 @@ static inline uint64_t square_mod(uint64_t a, uint64_t n)
     uint128_t tmp = (uint128_t)a * a;
     tmp %= n;
     return tmp;
+#endif
+}
+
+// (u * u + s) mod n
+static inline uint64_t square_add_mod(uint64_t u, uint64_t s, uint64_t n)
+{
+#if 0
+   // need to consider this in pollard-brent algorithm 
+   // u = (u * u + s) / 2
+   uint128_t t = (uint128_t)u * u;
+    t += s;
+    t += (t & 1) ? n : 0;
+    t >>= 1;
+    t -= (t >= n) ? n : 0;
+    return t % n;
+#endif
+
+#ifdef __x86_64__
+    uint64_t r, a;
+    asm("mulq %2" : "=d"(r), "=a"(a) : "1"(u) : "flags");
+    asm("addq %2, %1\n\tadcq $0, %0" : "+d"(r), "+a"(a) : "r"(s) : "flags");
+    asm("divq %2" : "+d"(r), "+a"(a) : "r"(n) : "flags");
+    return r;
+#else
+    uint128_t t = (uint128_t)u * u;
+    t += s;
+    return t % n;
 #endif
 }
 
@@ -155,11 +196,11 @@ static inline uint64_t uint128_log_2(uint128_t a)
     uint64_t t = (uint64_t)(a >> 64);
     if (t)
     {
-       return 127 - uint64_lzcnt(t);
+        return 127 - uint64_lzcnt(t);
     }
     else
     {
-       return 63 - uint64_lzcnt((uint64_t)a);
+        return 63 - uint64_lzcnt((uint64_t)a);
     }
 }
 
@@ -272,7 +313,7 @@ uint64_t uint64_small_factor(uint64_t n)
 {
     if (n <= 152)
     {
-// return smallest factor of n <= 151, or 1 if none is found.
+        // return smallest factor of n <= 151, or 1 if none is found.
         uint8_t stooopid_factor_table[] = {
             1, 1, 1, 1, 2, 1, 2, 1, 2, 3, 2, 1, 2, 1, 2, 3, 2, 1, 2, 1,  2, 3, 2, 1, 2, 5, 2, 3, 2,  1, 2,
             1, 2, 3, 2, 5, 2, 1, 2, 3, 2, 1, 2, 1, 2, 3, 2, 1, 2, 7, 2,  3, 2, 1, 2, 5, 2, 3, 2, 1,  2, 1,
@@ -438,7 +479,8 @@ static bool witness(uint64_t n, uint64_t s, uint64_t d, uint64_t a)
     return true;
 }
 
-// deterministic primality test for n < 2^64
+// deterministic primality test for n < 2^64.
+// Assume that small factors are already processed, assume n > 2
 bool uint64_is_prime(uint64_t n)
 {
     uint64_t d = n / 2;
@@ -606,7 +648,126 @@ static uint128_t uint128_mod_inv(uint128_t x, uint128_t m)
     return b == 1 ? v : 0;
 }
 
-// Mod(Mod(x, n), x^3 -a*x -a)^e
+// pollard-rho factorization with brent variant
+uint64_t brent_pollard_factor(uint64_t n)
+{
+    uint64_t i, x, ys, k;
+    uint64_t m = 1000;
+    uint64_t a = 2 + rnd() % (n - 4);
+    uint64_t y = 1 + rnd() % (n - 2);
+    uint64_t r = 1;
+    uint64_t q = 1;
+    uint64_t g = 1;
+
+    do
+    {
+        x = y;
+        for (i = 0; i < r; i++)
+        {
+            // y = y * y + a mod n
+            y = square_add_mod(y, a, n);
+        }
+
+        k = 0;
+        do
+        {
+            for (i = 0; i < m; i++)
+            {
+                ys = y;
+
+                // y = y * y + a mod n
+                y = square_add_mod(y, a, n);
+
+                // q = q * |x-y| mod n
+                q = mul_mod(q, (x > y) ? x - y : y - x, n);
+            }
+            g = uint64_gcd(q, n);
+            k += m;
+        } while (k < r && g == 1);
+
+        r <<= 1;
+    } while (g == 1);
+
+    if (g == n)
+    {
+        // this can occur if one of gcd parameter is 0
+        do
+        {
+            ys = square_add_mod(ys, a, n);
+            g = uint64_gcd((x > ys) ? x - ys : ys - x, n);
+        } while (g == 1);
+    }
+
+    return g;
+}
+
+void uint64_large_factors(vector<uint64_t> &primes, uint64_t n)
+{
+    unsigned i;
+    uint64_t m;
+    vector<uint64_t> factors;
+    factors.push_back(n);
+
+    do
+    {
+        m = factors.back();
+        factors.pop_back();
+
+        if (m == 1)
+            continue;
+
+        if (m < 157 * 157 || uint64_is_prime(m))
+        {
+            i = primes.size();
+            bool found = false;
+            while (i--)
+            {
+                if (primes[i] == m)
+                {
+                    found = true;
+                    break;
+                }
+            }
+            if (!found)
+            {
+                // push the prime factor
+                primes.push_back(m);
+            }
+        }
+        else
+        {
+            // m is not prime,
+            // get more prime and composite factors from pollard-rho method
+            uint64_t factor = brent_pollard_factor(m);
+            factors.push_back(m / factor);
+            factors.push_back(factor);
+        }
+    } while (factors.size());
+}
+
+uint64_t uint64_smallest_factor(uint64_t m)
+{
+    // first search a factor < 157
+    uint64_t factor = uint64_small_factor(m);
+    if (factor != 1)
+    {
+        // small prime factor < 157 found
+        return factor;
+    }
+    if (m < 157 * 157)
+    {
+        // input number is prime
+        return m;
+    }
+    // get factors in any order
+    vector<uint64_t> factors;
+    uint64_large_factors(factors, m);
+    // get the smallest factor
+    sort(factors.begin(), factors.end());
+    return factors[0];
+}
+
+// compute Mod(Mod(x, n), x^3 -a*x -a)^e
 // if e odd, assume s == 0 and u == 0 and t == 1
 static void cubic_exponentiate(uint64_t &s, uint64_t &t, uint64_t &u, uint64_t e, uint64_t n, uint64_t a)
 {
@@ -647,8 +808,6 @@ static void cubic_exponentiate(uint64_t &s, uint64_t &t, uint64_t &u, uint64_t e
         u = uint128_long_mod(uu, n);
     }
 }
-
-
 
 // conversion of a large number into a basis-10 string.
 // returns the output string length.
@@ -700,44 +859,44 @@ bool read_file(char *fn, uint64_t *p, uint64_t *Q, uint64_t *n)
     FILE *f = fopen(fn, "rt");
     if (f)
     {
-	    memset(line, 0, 100);
+        memset(line, 0, 100);
         while (fgets(line, 100, f))
         {
-		// trim the white-spaces at end of line (noisy stuff from hand-written files)
-		int l = strlen(line);
-		while (l > 0 && isspace(line[l-1]))
-		{
-			l--;
-		}
-		line[l] = 0;
+            // trim the white-spaces at end of line (noisy stuff from hand-written files)
+            int l = strlen(line);
+            while (l > 0 && isspace(line[l - 1]))
+            {
+                l--;
+            }
+            line[l] = 0;
 
-		if (*line == 0 || *line == '#')
-		{
-			// empty line, or comment, ignore
-			continue;
-		}
+            if (*line == 0 || *line == '#')
+            {
+                // empty line, or comment, ignore
+                continue;
+            }
             if (!memcmp(line, "p=", 2))
             {
                 p_temp = strtoull(&line[2], 0, 0);
-		p_found = true;
+                p_found = true;
                 continue;
             }
             if (!memcmp(line, "Q=", 2))
             {
                 q_temp = strtoull(&line[2], 0, 0);
-		q_found = true;
+                q_found = true;
                 continue;
             }
             if (!memcmp(line, "n=", 2))
             {
                 n_temp = strtoull(&line[2], 0, 0);
-		n_found = true;
+                n_found = true;
                 continue;
             }
 
-	    // not our file, give up
+            // not our file, give up
             valid = false;
-	    break;
+            break;
         }
         fclose(f);
     }
@@ -764,13 +923,13 @@ bool write_file(char *fn, char *bak, uint64_t p, uint64_t Q, uint64_t n)
     // first verify the current file is a valid one
     if (read_file(fn, &p_temp, &q_temp, &n_temp))
     {
-    // Create a backup file from the file just validated
-    // Unix : atomic file rename. 
-    // In case of crash, operation is done, or not done at all, and worst case is to have duplicate files.
+        // Create a backup file from the file just validated
+        // Unix : atomic file rename.
+        // In case of crash, operation is done, or not done at all, and worst case is to have duplicate files.
         rename(fn, bak);
     }
 
-    // create or overwrite the file with new values, 
+    // create or overwrite the file with new values,
     // and in case of crash and new file is incomplete or corrupted, there is a backup just done, pfew.
     FILE *f = fopen(fn, "wt");
     if (f)
@@ -790,16 +949,16 @@ bool write_file(char *fn, char *bak, uint64_t p, uint64_t Q, uint64_t n)
         fprintf(f, "n=%ld\n", n);
         fclose(f);
 
-	// never paranoid enough against full disks, need to read back the file.
-	// This also flushes the file in the case of remote file (read-after-write security on NFS ....)
+        // never paranoid enough against full disks, need to read back the file.
+        // This also flushes the file in the case of remote file (read-after-write security on NFS ....)
         p_temp = -1;
-	q_temp = -1;
-	n_temp = -1;
-	if (read_file(fn, &p_temp, &q_temp, &n_temp))
-	{
-		// return true if the file is correctly written
-		return (p_temp == p && q_temp == Q && n_temp == n);
-	}
+        q_temp = -1;
+        n_temp = -1;
+        if (read_file(fn, &p_temp, &q_temp, &n_temp))
+        {
+            // return true if the file is correctly written
+            return (p_temp == p && q_temp == Q && n_temp == n);
+        }
     }
     return false;
 }
@@ -898,17 +1057,16 @@ int main(int argc, char **argv)
     uint64_t dp = p_start % 6 == 1 ? 4 : 2;
     uint64_t dq = Q_start % 6 == 1 ? 4 : 2;
     uint64_t p = p_start;
-    uint64_t p_last = n_max / 5;
+    uint64_t p_last = (n_max + 4) / 5;
     uint64_t Q = Q_start;
     uint64_t display = 0;
-    while (p < p_last)
+    while (p <= p_last)
     {
         uint64_t Q_last = (n_max + p - 1) / p;
         while (Q < Q_last)
         {
             // p prime >= 5, Q > 1 is not a multiple of 3 nor a multiple of 2
-            // s = uint64_smallest_factor(Q);
-            uint64_t s = uint64_small_factor(Q);
+            uint64_t s = uint64_smallest_factor(Q);
             if (s < p)
             {
                 // the smallest factor of n = p*Q is s, a factor of Q.
@@ -916,13 +1074,13 @@ int main(int argc, char **argv)
             }
             else
             {
-		    // single thread progress
-		    if (++display > 10000)
-		    {
-			    printf("p = %ld, Q = %ld\n", p, Q);
-			    display = 0;
-		    }
-                uint64_t n = p * Q; // n is a proven composite
+                // single thread progress
+                if (++display > 10000)
+                {
+                    printf("p = %ld, Q = %ld\n", p, Q);
+                    display = 0;
+                }
+                uint64_t n = p * Q; // n = p * Q is a proven composite
                 uint128_t p3 = (uint128_t)p * p * p;
                 uint128_t Q3 = (uint128_t)Q * Q * Q;
                 uint128_t g = uint128_gcd(p3 - 1, Q3 - 1);
@@ -933,21 +1091,21 @@ int main(int argc, char **argv)
                     A = g > A ? A : A % g;
                     if (A > 3)
                     {
-                        uint64_t k_last = n >> 1;
+                        uint64_t k_last = (n + 1) >> 1;
                         uint64_t k = 1;
                         uint64_t dk = 2;
-			//
-			// TODO : start a thread from here
-			// precompute n to accelerate mod operations
-			//
+                        //
+                        // TODO : start a thread from here
+                        // precompute n to accelerate mod operations
+                        //
                         while (k <= k_last)
                         {
-			    uint128_t kk1 = (uint128_t)k * (k-1) + 7;
+                            uint128_t kk1 = (uint128_t)k * (k - 1) + 7;
                             uint64_t a = uint128_long_mod(kk1, n);
                             // verify fermat test Mod(a,n)^R == 1
                             if (pow_mod(a, R, n) == 1)
                             {
-				// run cubic test
+                                // run cubic test
                                 // B = Mod(x, n)
                                 uint64_t bs = 0;
                                 uint64_t bt = 1;
@@ -960,15 +1118,15 @@ int main(int argc, char **argv)
                                 uint64_t bu2 = bu;
                                 // B2 = Mod(B2, x^3 -ax -a)^2
                                 cubic_exponentiate(bs2, bt2, bu2, 2, n, a);
-				// check B2+B+1 is NOT -x^2 + x + 1
+                                // check B2+B+1 is NOT -x^2 + x + 1
                                 bs2 = uint64_add_mod(bs2, bs, n);
                                 if (bs2 == n - 1)
                                 {
                                     bt2 = uint64_add_mod(bt2, bt, n);
                                     if (bt2 == 1)
                                     {
-                                        bu2 = uint64_add_mod(bu2, bu, n);
-                                        if (bu2 == 0)
+                                        bu2 = uint64_add_mod(bu2, bu + 1, n);
+                                        if (bu2 == a)
                                         {
                                             // Aoutch, n = p*Q could be prime or pseudoprime
                                             char buff[256];
@@ -989,6 +1147,8 @@ int main(int argc, char **argv)
                                             *ptr = 0;
                                             printf("%s\n", buff);
                                             fflush(stdout);
+                                            // got 1 counter-example, it is time to stop
+                                            exit(1);
                                         }
                                         else
                                         {
@@ -1024,19 +1184,22 @@ int main(int argc, char **argv)
             if (t1 - t0 > 1800)
             {
                 if (!write_file(temp_filename1, temp_filename2, p, Q, n_max))
-		{
-			printf("Unable to write a file for restart (%s)\n", temp_filename1);
-		}
-		else
-		{
-			t0 = t1;
-		}
+                {
+                    printf("Unable to write a file for restart (%s)\n", temp_filename1);
+                }
+                else
+                {
+                    t0 = t1;
+                }
             }
         }
 
         // next p, not a multiple of 3, not a multiple of 2
         p += dp;
         dp = 6 - dp;
+        // first Q > 1, not a multiple of 3, not a multiple of 2
+	Q = 5;
+	dq = 2;
     }
 
     return (0);
