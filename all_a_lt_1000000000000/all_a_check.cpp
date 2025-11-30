@@ -799,12 +799,14 @@ uint64_t uint64_smallest_factor(uint64_t m)
     // get factors in any order
     vector<uint64_t> factors;
     uint64_large_factors(factors, m);
-    // get the smallest factor
+    // get the smallest factor from the vector
     sort(factors.begin(), factors.end());
     return factors[0];
 }
 
 // compute Mod(Mod(x, n), x^3 -a*x -a)^e
+// assume n is less than 60 or 61 bits
+// assume a < n
 // if e odd, assume s == 0 and u == 0 and t == 1
 static void cubic_exponentiate(uint64_t &s, uint64_t &t, uint64_t &u, uint64_t e, uint64_t n, uint64_t a)
 {
@@ -813,7 +815,7 @@ static void cubic_exponentiate(uint64_t &s, uint64_t &t, uint64_t &u, uint64_t e
     uint128_t s2, t2, u2, st, tu, us, uu, ss, tt;
     while (bit--)
     {
-        // Double
+        // start Square
         tmp = square_mod(s, n);
         s2 = (uint128_t)tmp * a;
         t2 = (uint128_t)t * t;
@@ -827,7 +829,7 @@ static void cubic_exponentiate(uint64_t &s, uint64_t &t, uint64_t &u, uint64_t e
         us <<= 1;
         if (e & (1ull << bit))
         {
-            // add
+            // finish Square and multiply by x
             us = s2 + us + t2;
             tmp = uint128_long_mod(us, n);
             uu = (uint128_t)tmp * a;
@@ -836,6 +838,7 @@ static void cubic_exponentiate(uint64_t &s, uint64_t &t, uint64_t &u, uint64_t e
         }
         else
         {
+            // finish Square
             ss = s2 + us + t2;
             tt = s2 + st + tu;
             uu = st + u2;
@@ -885,14 +888,15 @@ unsigned int128_sprint(char *ptr, int128_t x)
 }
 
 // read file, cautious about corruped or truncated files
-bool read_file(char *fn, uint64_t *p, uint64_t *Q, uint64_t *n)
+bool read_file(char *fn, uint64_t *p, uint64_t *Q, uint64_t *n, uint64_t *s)
 {
     char line[100];
     bool p_found = false;
     bool q_found = false;
     bool n_found = false;
+    bool s_found = false;
     bool valid = true;
-    uint64_t p_temp = -1, q_temp = -1, n_temp = -1;
+    uint64_t p_temp = -1, q_temp = -1, n_temp = -1, s_temp = -1;
     FILE *f = fopen(fn, "rt");
     if (f)
     {
@@ -930,6 +934,12 @@ bool read_file(char *fn, uint64_t *p, uint64_t *Q, uint64_t *n)
                 n_found = true;
                 continue;
             }
+            if (!memcmp(line, "s=", 2))
+            {
+                s_temp = strtoull(&line[2], 0, 0);
+                s_found = true;
+                continue;
+            }
 
             // not our file, give up
             valid = false;
@@ -942,23 +952,24 @@ bool read_file(char *fn, uint64_t *p, uint64_t *Q, uint64_t *n)
         valid = false;
     }
 
-    if (valid && p_found == true && q_found == true && n_found == true)
+    if (valid && p_found == true && q_found == true && n_found == true && s_found == true)
     {
         // file is complete, without missing field
         *p = p_temp;
         *Q = q_temp;
         *n = n_temp;
+        *s = s_temp;
         return true;
     }
     return false;
 }
 
 // write file, cautious about worst cases in the life of a computer
-bool write_file(char *fn, char *bak, uint64_t p, uint64_t Q, uint64_t n)
+bool write_file(char *fn, char *bak, uint64_t p, uint64_t Q, uint64_t n, uint64_t s)
 {
-    uint64_t p_temp = -1, q_temp = -1, n_temp = -1;
+    uint64_t p_temp = -1, q_temp = -1, n_temp = -1, s_temp = -1;
     // first verify the current file is a valid one
-    if (read_file(fn, &p_temp, &q_temp, &n_temp))
+    if (read_file(fn, &p_temp, &q_temp, &n_temp, &s_temp))
     {
         // Create a backup file from the file just validated
         // Unix : atomic file rename.
@@ -984,6 +995,7 @@ bool write_file(char *fn, char *bak, uint64_t p, uint64_t Q, uint64_t n)
         fprintf(f, "p=%ld\n", p);
         fprintf(f, "Q=%ld\n", Q);
         fprintf(f, "n=%ld\n", n);
+        fprintf(f, "s=%ld\n", s);
         fclose(f);
 
         // never paranoid enough against full disks, need to read back the file.
@@ -991,10 +1003,11 @@ bool write_file(char *fn, char *bak, uint64_t p, uint64_t Q, uint64_t n)
         p_temp = -1;
         q_temp = -1;
         n_temp = -1;
-        if (read_file(fn, &p_temp, &q_temp, &n_temp))
+        s_temp = -1;
+        if (read_file(fn, &p_temp, &q_temp, &n_temp, &s_temp))
         {
             // return true if the file is correctly written
-            return (p_temp == p && q_temp == Q && n_temp == n);
+            return (p_temp == p && q_temp == Q && n_temp == n && s_temp == s);
         }
     }
     return false;
@@ -1008,6 +1021,7 @@ int main(int argc, char **argv)
     char temp_filename1[100] = "cubic_all_a.txt\0";
     char temp_filename2[100] = "cubic_all_a.bak\0";
     bool use_temp_files = true;
+    uint64_t interval_seconds = 600; // 10 minutes
 
     for (int i = 1; i < argc; i++)
     {
@@ -1029,9 +1043,14 @@ int main(int argc, char **argv)
             use_temp_files = false;
             continue;
         }
+        if (!strcmp(argv[i], "-s"))
+        {
+            interval_seconds = strtoull(argv[++i], 0, 0);
+            continue;
+        }
         if (!strcmp(argv[i], "-f"))
         {
-            if (read_file(argv[++i], &p_start, &Q_start, &n_max))
+            if (read_file(argv[++i], &p_start, &Q_start, &n_max, &interval_seconds))
             {
                 printf("Start from values p=%ld Q=%ld, to n=%ld\n", p_start, Q_start, n_max);
             }
@@ -1048,6 +1067,7 @@ int main(int argc, char **argv)
         printf("-p ddd : starting prime p, default is %ld\n", p_start);
         printf("-Q ddd : starting cofactor Q, default is %ld\n", Q_start);
         printf("-n ddd : maximum value for n = p*Q, default is %ld\n", n_max);
+        printf("-s ddd : interval in seconds between restart file updates, default is %ld\n", interval_seconds);
         printf("-f aaa : alternative filename to restart at some (p,Q,n_max)\n");
         printf("\n");
         printf("-t aaa : temp filename prefix %s %s\n", temp_filename1, temp_filename2);
@@ -1061,13 +1081,13 @@ int main(int argc, char **argv)
 
     if (use_temp_files)
     {
-        if (read_file(temp_filename1, &p_start, &Q_start, &n_max))
+        if (read_file(temp_filename1, &p_start, &Q_start, &n_max, &interval_seconds))
         {
             printf("Start from values p=%ld Q=%ld, to n=%ld\n", p_start, Q_start, n_max);
         }
         else
         {
-            if (read_file(temp_filename2, &p_start, &Q_start, &n_max))
+            if (read_file(temp_filename2, &p_start, &Q_start, &n_max, &interval_seconds))
             {
                 printf("Start from values p=%ld Q=%ld, to n=%ld\n", p_start, Q_start, n_max);
             }
@@ -1080,6 +1100,7 @@ int main(int argc, char **argv)
     {
         p_start += 2;
     }
+
     // round Q > 1 to next odd, non multiple of 3
     Q_start = (Q_start < 5) ? 5 : Q_start | 1;
     while (Q_start % 3 == 0)
@@ -1097,6 +1118,7 @@ int main(int argc, char **argv)
     uint64_t p_last = uint64_isqrt(n_max) + 1;
     uint64_t Q = Q_start;
     uint64_t display = 0;
+
     while (p <= p_last)
     {
         uint64_t Q_last = (n_max + p - 1) / p;
@@ -1128,18 +1150,21 @@ int main(int argc, char **argv)
                     A = g > A ? A : A % g;
                     if (A > 3)
                     {
-                        uint64_t k_last = (n + 1) >> 1;
-                        uint64_t k = 1;
-                        uint64_t dk = 2;
                         //
-                        // TODO : start a thread from here
-                        // precompute n to accelerate mod operations
+                        // TODO : start a child thread from here
                         //
-                        while (k <= k_last)
+                        uint64_t a = 7;
+                        //
+                        // TODO : precompute barrett(n) to accelerate mod operations mod n
+                        //
+                        for (uint64_t d = 0; d < n; d += 2)
                         {
-                            uint128_t kk1 = (uint128_t)k * (k - 1) + 7;
-                            uint64_t a = uint128_long_mod(kk1, n);
+                            // a = 7 + k * (k-1) unrolled as  a = a + 2k
+                            a += d;
+                            a = (a >= n) ? a - n : a;
+
                             // verify fermat test Mod(a,n)^R == 1
+                            // uint64_t ft = (a == 2) ? pow2_mod(ddR, n) : pow_mod(a, R, n);
                             if (pow_mod(a, R, n) == 1)
                             {
                                 // run cubic test
@@ -1202,10 +1227,6 @@ int main(int argc, char **argv)
                                     // n is composite for sure
                                 }
                             }
-
-                            // next k, and k%3 != 2
-                            k += dk;
-                            dk = 2 - dk;
                         }
                     }
                 }
@@ -1218,11 +1239,11 @@ int main(int argc, char **argv)
             // after 30 minutes, update the temp files.
             // In case of crash, just restarting the program without parameter would restart from last saved values
             time_t t1 = time(NULL);
-            if (t1 - t0 > 1800)
+            if (t1 - t0 >= interval_seconds)
             {
-                if (!write_file(temp_filename1, temp_filename2, p, Q, n_max))
+                if (!write_file(temp_filename1, temp_filename2, p, Q, n_max, interval_seconds))
                 {
-                    printf("Unable to write a file for restart (%s)\n", temp_filename1);
+                    printf("Unable to write the file for restart after crash (%s)\n", temp_filename1);
                 }
                 else
                 {
@@ -1234,9 +1255,9 @@ int main(int argc, char **argv)
         // next p, not a multiple of 3, not a multiple of 2
         p += dp;
         dp = 6 - dp;
-        // first Q > 1, not a multiple of 3, not a multiple of 2
-        Q = 5;
-        dq = 2;
+        // first Q >= p, not a multiple of 3, not a multiple of 2
+        Q = p;
+        dq = dp;
     }
 
     return (0);
