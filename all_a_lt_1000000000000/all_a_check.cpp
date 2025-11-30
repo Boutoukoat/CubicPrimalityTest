@@ -308,6 +308,43 @@ static int uint64_jacobi(uint64_t x, uint64_t y)
     return (n == 1) ? t : 0;
 }
 
+// integer square root (rounded down)
+uint64_t uint64_isqrt(uint64_t x)
+{
+    // Avoid divide by zero
+    if (x < 2)
+    {
+        return x;
+    }
+    // This code is based on the fact that
+    // sqrt(x) == x^1/2 == 2^(log2(x)/2)
+    // Unfortunately it's a little more tricky
+    // when fast log2 is floored.
+    uint64_t log2x = uint64_log_2(x);
+    uint64_t log2y = log2x / 2;
+    uint64_t y = 1 << log2y;
+    uint64_t y_squared = 1 << (2 * log2y);
+    int64_t sqr_diff = x - y_squared;
+    // Perform lerp between powers of four
+    y += (sqr_diff / 3) >> log2y;
+    // The estimate is probably too low, refine it upward
+    y_squared = y * y;
+    sqr_diff = x - y_squared;
+    y += sqr_diff / (2 * y);
+    // The estimate may be too high. If so, refine it downward
+    y_squared = y * y;
+    sqr_diff = x - y_squared;
+    if (sqr_diff >= 0)
+    {
+        return y;
+    }
+    y -= (-sqr_diff / (2 * y)) + 1;
+    // The estimate may still be 1 too high
+    y_squared = y * y;
+    sqr_diff = x - y_squared;
+    return sqr_diff < 0 ? y - 1 : y;
+}
+
 // return smallest factor of n < 157*157, or 1 if none is found.
 uint64_t uint64_small_factor(uint64_t n)
 {
@@ -1057,7 +1094,7 @@ int main(int argc, char **argv)
     uint64_t dp = p_start % 6 == 1 ? 4 : 2;
     uint64_t dq = Q_start % 6 == 1 ? 4 : 2;
     uint64_t p = p_start;
-    uint64_t p_last = (n_max + 4) / 5;
+    uint64_t p_last = uint64_isqrt(n_max) + 1;
     uint64_t Q = Q_start;
     uint64_t display = 0;
     while (p <= p_last)
@@ -1198,8 +1235,8 @@ int main(int argc, char **argv)
         p += dp;
         dp = 6 - dp;
         // first Q > 1, not a multiple of 3, not a multiple of 2
-	Q = 5;
-	dq = 2;
+        Q = 5;
+        dq = 2;
     }
 
     return (0);
