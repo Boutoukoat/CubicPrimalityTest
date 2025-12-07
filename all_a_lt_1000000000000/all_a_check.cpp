@@ -392,27 +392,28 @@ int main(int argc, char **argv)
 
     while (n <= n_max)
     {
-                // single thread progress
-                if (++display > 10000)
-                {
-                    time_t d1 = time(NULL);
-                    printf("n = %ld, %ld\n", n, d1 - d0);
-                    display = 0;
-                    d0 = d1;
-                }
+        // single thread progress
+        if (++display > 10000)
+        {
+            time_t d1 = time(NULL);
+            printf("n = %ld, %ld\n", n, d1 - d0);
+            display = 0;
+            d0 = d1;
+        }
         factor_v f;
         uint64_all_factors(f, n);
         if (f.size() < 2 || is_perfect_power(f) == true)
         {
-		// prime or perfect power : 
-		// do nothing
+            // ------------------------------------------------------------------------------
+            // prime or perfect power
+            // ------------------------------------------------------------------------------
         }
 
-        // ------------------------------------------------------------------------------
-        // n has exactly 2 distinct factors p < q
-        // ------------------------------------------------------------------------------
         else if (is_semiprime(f))
         {
+            // ------------------------------------------------------------------------------
+            // n has exactly 2 distinct factors p < q
+            // ------------------------------------------------------------------------------
             uint64_t p = f[0].prime;
             uint64_t q = f[1].prime;
             uint128_t p3 = (uint128_t)p * p * p;
@@ -422,21 +423,22 @@ int main(int argc, char **argv)
             uint128_t A = (uint128_t)n * (n + 1) + 1;
             A = g > A ? A : A % g;
             if (R < 3 || (p != 5 && R == 4) || (p < V_COUNT && R < V[p]) || (q < V_COUNT && R < V[q]) ||
-                  (R < q - 1 && q % 10 == 1) || (R < p - 1 && p % 10 == 1) || A < 4)
-	    {
-		    skip_semiprime_count += 1;
-	    }
-	    else
+                (R < q - 1 && q % 10 == 1) || (R < p - 1 && p % 10 == 1) || A < 4)
             {
-		    semiprime_count += 1;
+                skip_semiprime_count += 1;
+            }
+            else
+            {
+                semiprime_count += 1;
                 verify_all_a(n, p, q, g, R, A);
             }
         }
-        // ------------------------------------------------------------------------------
-        // n has exactly 3 distinct factors p < q < r
-        // ------------------------------------------------------------------------------
         else if (0 && is_tripleprime(f))
         {
+            // ------------------------------------------------------------------------------
+            // n has exactly 3 distinct factors p < q < r
+            // ------------------------------------------------------------------------------
+
             // todo
             uint64_t p = f[0].prime;
             uint64_t q = f[1].prime;
@@ -502,11 +504,12 @@ int main(int argc, char **argv)
     //       done
 
     // debug : verifies visually the number of "modexps" and "cubic exponentiates" and other values
-    printf("modexp count ........... : %20ld\n", modexp_count);
-    printf("exponentiate count ..... : %20ld\n", exponentiate_count);
-    printf("semiprime count ........ : %20ld\n", semiprime_count);
-    printf("skip semiprime count ... : %20ld\n", skip_semiprime_count);
+    printf("modexp count ................. : %20ld\n", modexp_count);
+    printf("cubic exponentiate count ..... : %20ld\n", exponentiate_count);
+    printf("semiprime count .............. : %20ld\n", semiprime_count);
+    printf("skip semiprime count ......... : %20ld\n", skip_semiprime_count);
 
     return (0);
 }
+
 // -----------------------------------------------------------------------

@@ -662,7 +662,7 @@ static void barrett_precompute(struct barrett_t *p, uint64_t m)
     p->n2 = p->n << 1;
     if (p->n <= 31)
     {
-        // simple Barrett, 
+        // simple Barrett,
         p->n32 = 0;
         p->q = (1ull << p->n2) / m;
         p->r = 0;
@@ -694,8 +694,8 @@ static uint64_t barrett_mul_mod(uint64_t u, uint64_t v, const struct barrett_t &
         uint64_t r = u * v;
         uint64_t e = ((uint128_t)r * bt.q) >> bt.n2;
         r -= e * bt.m;
-	r -= (r >= bt.m) ? bt.m : 0;
-        return r;                                  //    r <= m
+        r -= (r >= bt.m) ? bt.m : 0;
+        return r; //    r <= m
     }
 
     if (bt.n < 42)

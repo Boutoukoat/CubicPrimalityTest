@@ -41,9 +41,9 @@ static int self_test_64(void)
     barrett_precompute(&u, s);
     r = barrett_mul_mod(99, 38, u);
     if (r % s != 25)
-    	return -1;
+        return -1;
     if (r > 2 * s)
-    	return -1;
+        return -1;
 
     printf("Perfect square ...\n");
     b = is_perfect_square(6);
