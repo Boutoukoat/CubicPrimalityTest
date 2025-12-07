@@ -35,6 +35,16 @@ static int self_test_64(void)
     r = shift_mod(s, 33, t);
     assert(r == 3145728);
 
+    printf("Barrett reduction speed-up\n");
+    barrett_t u;
+    s = 101;
+    barrett_precompute(&u, s);
+    r = barrett_mul_mod(99, 38, u);
+    if (r % s != 25)
+    	return -1;
+    if (r > 2 * s)
+    	return -1;
+
     printf("Perfect square ...\n");
     b = is_perfect_square(6);
     if (b)
@@ -92,6 +102,35 @@ static int self_test_64(void)
     if (b)
         return -1;
     b = is_perfect_sursolid(0x100500A00A005002ull);
+    if (b)
+        return -1;
+
+    printf("Perfect power ...\n");
+    unsigned perfect_powers[] = {1,   4,   8,   9,   16,  25,  27,  32,  36,  49,  64,   81,   100,  121, 125,
+                                 128, 144, 169, 196, 216, 225, 243, 256, 289, 324, 343,  361,  400,  441, 484,
+                                 512, 529, 576, 625, 676, 729, 784, 841, 900, 961, 1000, 1024, 1089, 0};
+    unsigned ppj = 1;
+    for (unsigned ppi = 0; perfect_powers[ppi]; ppi++)
+    {
+        while (ppj < perfect_powers[ppi])
+        {
+            b = is_perfect_power(ppj);
+            if (b)
+                return -1;
+            ppj++;
+        }
+        b = is_perfect_power(ppj);
+        if (!b)
+            return -1;
+        ppj++;
+    }
+    b = is_perfect_power(0x100500A00A005001ull);
+    if (!b)
+        return -1;
+    b = is_perfect_power(0x100500A00A005000ull);
+    if (b)
+        return -1;
+    b = is_perfect_power(0x100500A00A005002ull);
     if (b)
         return -1;
 
@@ -263,13 +302,17 @@ static int self_test_64(void)
         return -1;
 
     printf("Power ...\n");
+    barrett_t bt;
+    barrett_precompute(&bt, 197);
     r = pow_mod(2, 0xfedc, 197);
     s = pow2_mod(0xfedc, 197);
-    if (r != 182 || r != s)
+    t = barrett_pow_mod(2, 0xfedc, bt);
+    if (r != 182 || r != s || r != t)
         return -1;
     r = pow_mod(2, 0x8765, 197);
     s = pow2_mod(0x8765, 197);
-    if (r != 103 || r != s)
+    t = barrett_pow_mod(2, 0x8765, bt);
+    if (r != 103 || r != s || r != t)
         return -1;
     r = pow_mod(2, 0x81, 197);
     if (r != 153)
@@ -311,7 +354,14 @@ static int self_test_64(void)
         return -1;
 
     r = pow_mod(3, 0xaa55, 197);
-    if (r != 0xa7)
+    t = barrett_pow_mod(3, 0xaa55, bt);
+    if (r != 0xa7 || r != t)
+        return -1;
+
+    barrett_precompute(&bt, 3725);
+    r = pow_mod(3422, 252, 3725);
+    t = barrett_pow_mod(3422, 252, bt);
+    if (r != 1116 || r != t)
         return -1;
 
     printf("Known primes ...\n");
@@ -389,6 +439,7 @@ static int self_test_64(void)
         return -1;
     }
 
+    t = 1;
     t <<= 61;
     t -= 1;
     b = uint64_is_prime(t);
@@ -409,8 +460,8 @@ int main(int argc, char **argv)
     rc = self_test_64();
     if (rc)
     {
-    printf("failed\n");
-    exit(1);
+        printf("failed\n");
+        exit(1);
     }
     printf("All tests passed\n");
     return 0;

@@ -12,10 +12,13 @@
 //
 // -----------------------------------------------------------------------
 
-#include <omp.h>
 #include <assert.h>
+#include <omp.h>
 
 #include "math_utils.cpp"
+
+#include "v_table.cpp"
+#define V_COUNT (sizeof(V) / sizeof(V[0]))
 
 // compute Mod(Mod(x, n), x^3 -a*x -a)^e
 // assume n is less than 60 or 61 bits
@@ -63,15 +66,14 @@ static void cubic_exponentiate(uint64_t &s, uint64_t &t, uint64_t &u, uint64_t e
 }
 
 // read file, cautious about corruped or truncated files
-bool read_file(char *fn, uint64_t *n, uint64_t *i, uint64_t *m, uint64_t *s)
+bool read_file(char *fn, uint64_t *n, uint64_t *m, uint64_t *s)
 {
     char line[100];
     bool n_found = false;
-    bool i_found = false;
     bool m_found = false;
     bool s_found = false;
     bool valid = true;
-    uint64_t n_temp = -1, i_temp = -1, m_temp = -1, s_temp = -1;
+    uint64_t n_temp = -1, m_temp = -1, s_temp = -1;
     FILE *f = fopen(fn, "rt");
     if (f)
     {
@@ -95,12 +97,6 @@ bool read_file(char *fn, uint64_t *n, uint64_t *i, uint64_t *m, uint64_t *s)
             {
                 n_temp = strtoull(&line[2], 0, 0);
                 n_found = true;
-                continue;
-            }
-            if (!memcmp(line, "i=", 2))
-            {
-                i_temp = strtoull(&line[2], 0, 0);
-                i_found = true;
                 continue;
             }
             if (!memcmp(line, "m=", 2))
@@ -127,11 +123,10 @@ bool read_file(char *fn, uint64_t *n, uint64_t *i, uint64_t *m, uint64_t *s)
         valid = false;
     }
 
-    if (valid && n_found == true && i_found == true && m_found == true && s_found == true)
+    if (valid && n_found == true && m_found == true && s_found == true)
     {
         // file is complete, without missing field
         *n = n_temp;
-        *i = i_temp;
         *m = m_temp;
         *s = s_temp;
         return true;
@@ -140,11 +135,11 @@ bool read_file(char *fn, uint64_t *n, uint64_t *i, uint64_t *m, uint64_t *s)
 }
 
 // write file, cautious about worst cases in the life of a computer
-bool write_file(char *fn, char *bak, uint64_t n, uint64_t i, uint64_t m, uint64_t s)
+bool write_file(char *fn, char *bak, uint64_t n, uint64_t m, uint64_t s)
 {
-    uint64_t n_temp = -1, i_temp = -1, m_temp = -1, s_temp = -1;
+    uint64_t n_temp = -1, m_temp = -1, s_temp = -1;
     // first verify the current file is a valid one
-    if (read_file(fn, &n_temp, &i_temp, &m_temp, &s_temp))
+    if (read_file(fn, &n_temp, &m_temp, &s_temp))
     {
         // Create a backup file from the file just validated
         // Unix : atomic file rename.
@@ -168,7 +163,6 @@ bool write_file(char *fn, char *bak, uint64_t n, uint64_t i, uint64_t m, uint64_
 
         // write restart parameters
         fprintf(f, "n=%ld\n", n);
-        fprintf(f, "i=%ld\n", i);
         fprintf(f, "m=%ld\n", m);
         fprintf(f, "s=%ld\n", s);
         fclose(f);
@@ -176,16 +170,121 @@ bool write_file(char *fn, char *bak, uint64_t n, uint64_t i, uint64_t m, uint64_
         // never paranoid enough against full disks, need to read back the file.
         // This also flushes the file in the case of remote file (read-after-write security on NFS ....)
         n_temp = -1;
-        i_temp = -1;
         m_temp = -1;
         s_temp = -1;
-        if (read_file(fn, &n_temp, &i_temp, &m_temp, &s_temp))
+        if (read_file(fn, &n_temp, &m_temp, &s_temp))
         {
             // return true if the file is correctly written
-            return (n_temp == n && i_temp == i && m_temp == m && s_temp == s);
+            return (n_temp == n && m_temp == m && s_temp == s);
         }
     }
     return false;
+}
+
+// -----------------------------------------------------------------
+//
+// useful debug counters
+//
+// -----------------------------------------------------------------
+
+static uint64_t modexp_count = 0;
+static uint64_t exponentiate_count = 0;
+static uint64_t skip_semiprime_count = 0;
+static uint64_t semiprime_count = 0;
+
+// -----------------------------------------------------------------
+//
+// utility function
+//
+// -----------------------------------------------------------------
+
+void verify_all_a(uint64_t n, uint64_t p, uint64_t Q, uint128_t g, uint64_t R, uint128_t A)
+{
+
+    struct barrett_t bn;
+    barrett_precompute(&bn, n);
+    uint64_t a = 7;
+    for (uint64_t d = 0; d < n; d += 2)
+    {
+        // a = 7 + k * (k-1) unrolled as  a = a + 2k
+        a += d;
+        a -= (a >= n) ? n : 0;
+
+        // verify test Mod(a,n)^R == 1
+        modexp_count += 1;
+        if (barrett_pow_mod(a, R, bn) == 1)
+        {
+            exponentiate_count += 1;
+            // run cubic test
+            // B = Mod(x, n)
+            uint64_t bs = 0;
+            uint64_t bt = 1;
+            uint64_t bu = 0;
+            // B = Mod(B, x^3 -ax -a)^R
+            cubic_exponentiate(bs, bt, bu, R, n, a);
+            // B2 = B
+            uint64_t bs2 = bs;
+            uint64_t bt2 = bt;
+            uint64_t bu2 = bu;
+            // B2 = Mod(B2, x^3 -ax -a)^2
+            cubic_exponentiate(bs2, bt2, bu2, 2, n, a);
+            // check B2+B+1 is NOT -x^2 + x + 1
+            bs2 = uint64_add_mod(bs2, bs, n);
+            if (bs2 == n - 1)
+            {
+                bt2 = uint64_add_mod(bt2, bt, n);
+                if (bt2 == 1)
+                {
+                    bu2 = uint64_add_mod(bu2, bu + 1, n);
+                    if (bu2 == a)
+                    {
+                        // Aoutch, n = p*Q could be prime or pseudoprime ??!!??!!
+                        char buff[256];
+                        char *ptr = buff;
+                        *ptr++ = '[';
+                        ptr += uint128_sprint(ptr, n);
+                        *ptr++ = ',';
+                        ptr += uint128_sprint(ptr, p);
+                        *ptr++ = ',';
+                        ptr += uint128_sprint(ptr, Q);
+                        *ptr++ = ',';
+                        ptr += uint128_sprint(ptr, g);
+                        *ptr++ = ',';
+                        ptr += uint128_sprint(ptr, R);
+                        *ptr++ = ',';
+                        ptr += uint128_sprint(ptr, A);
+                        *ptr++ = ']';
+                        *ptr = 0;
+                        printf("%s\n", buff);
+                        fflush(stdout);
+
+                        // got 1 counter-example, it is time to stop
+                        exit(1);
+                    }
+                    else
+                    {
+                        // polynomial test :
+                        // n is composite for sure
+                    }
+                }
+                else
+                {
+                    // polynomial test :
+                    // n is composite for sure
+                }
+            }
+            else
+            {
+                // polynomial test :
+                // n is composite for sure
+            }
+        }
+        else
+        {
+            // modexp test :
+            // n is composite for sure
+        }
+    }
 }
 
 // -----------------------------------------------------------------
@@ -197,7 +296,6 @@ int main(int argc, char **argv)
 {
     uint64_t n_max = 1000000000000ul;
     uint64_t n_start = 5ul;
-    uint64_t i_start = 0ul;
     char temp_filename1[100] = "cubic_all_a.txt\0";
     char temp_filename2[100] = "cubic_all_a.bak\0";
     bool use_temp_files = true;
@@ -217,12 +315,6 @@ int main(int argc, char **argv)
             use_temp_files = false;
             continue;
         }
-        if (!strcmp(argv[i], "-i"))
-        {
-            i_start = strtoull(argv[++i], 0, 0);
-            use_temp_files = false;
-            continue;
-        }
         if (!strcmp(argv[i], "-s"))
         {
             interval_seconds = strtoull(argv[++i], 0, 0);
@@ -230,9 +322,9 @@ int main(int argc, char **argv)
         }
         if (!strcmp(argv[i], "-f"))
         {
-            if (read_file(argv[++i], &n_start, &i_start, &n_max, &interval_seconds))
+            if (read_file(argv[++i], &n_start, &n_max, &interval_seconds))
             {
-                printf("Start from values n=%ld factor# i=%ld, to max=%ld\n", n_start, i_start, n_max);
+                printf("Start from value n=%ld, to max=%ld\n", n_start, n_max);
             }
             use_temp_files = false;
             continue;
@@ -245,7 +337,6 @@ int main(int argc, char **argv)
             continue;
         }
         printf("-n ddd : starting number, default is %ld\n", n_start);
-        printf("-i ddd : starting factor, default is %ld\n", i_start);
         printf("-max ddd : maximum value for n = p*Q, default is %ld\n", n_max);
         printf("-s ddd : interval in seconds between restart file updates, default is %ld\n", interval_seconds);
         printf("-f aaa : alternative filename to restart at some (p,Q,n_max)\n");
@@ -261,15 +352,15 @@ int main(int argc, char **argv)
 
     if (use_temp_files)
     {
-        if (read_file(temp_filename1, &n_start, &i_start, &n_max, &interval_seconds))
+        if (read_file(temp_filename1, &n_start, &n_max, &interval_seconds))
         {
-            printf("Start from values n=%ld factor# i=%ld, to max=%ld\n", n_start, i_start, n_max);
+            printf("Start from value n=%ld, to max=%ld\n", n_start, n_max);
         }
         else
         {
-            if (read_file(temp_filename2, &n_start, &i_start, &n_max, &interval_seconds))
+            if (read_file(temp_filename2, &n_start, &n_max, &interval_seconds))
             {
-                printf("Start from values n=%ld factor# i=%ld, to max=%ld\n", n_start, i_start, n_max);
+                printf("Start from value n=%ld, to max=%ld\n", n_start, n_max);
             }
         }
     }
@@ -281,47 +372,86 @@ int main(int argc, char **argv)
         n_start += 2;
     }
 
-    printf("Start from values n=%ld factor# i=%ld, to max=%ld\n", n_start, i_start, n_max);
+    printf("Start from value n=%ld, to max=%ld\n", n_start, n_max);
 
     time_t t0 = time(NULL);
     time_t d0 = time(NULL);
     uint64_t n = n_start;
     uint64_t dn = n_start % 6 == 1 ? 4 : 2;
     uint64_t display = 0;
-    uint64_t modexp_count = 0;
-    uint64_t exponentiate_count = 0;
+    modexp_count = 0;
+    exponentiate_count = 0;
+    semiprime_count = 0;
+    skip_semiprime_count = 0;
 
     // update the restart file
-    if (!write_file(temp_filename1, temp_filename2, n, i_start, n_max, interval_seconds))
+    if (!write_file(temp_filename1, temp_filename2, n, n_max, interval_seconds))
     {
         printf("Unable to write the file for restart after crash (%s)\n", temp_filename1);
     }
 
     while (n <= n_max)
     {
-        factor_v f;
-        bool is_exact_power = uint64_all_factors(f, n);
-        if (is_exact_power == false)
-        {
-            // iterate over the prime factors of n
-            for (uint64_t i = i_start; i < f.size(); i++)
-            {
                 // single thread progress
                 if (++display > 10000)
                 {
                     time_t d1 = time(NULL);
-                    printf("n = %ld, i = %ld, %ld\n", n, i, d1 - d0);
+                    printf("n = %ld, %ld\n", n, d1 - d0);
                     display = 0;
                     d0 = d1;
                 }
+        factor_v f;
+        uint64_all_factors(f, n);
+        if (f.size() < 2 || is_perfect_power(f) == true)
+        {
+		// prime or perfect power : 
+		// do nothing
+        }
 
+        // ------------------------------------------------------------------------------
+        // n has exactly 2 distinct factors p < q
+        // ------------------------------------------------------------------------------
+        else if (is_semiprime(f))
+        {
+            uint64_t p = f[0].prime;
+            uint64_t q = f[1].prime;
+            uint128_t p3 = (uint128_t)p * p * p;
+            uint128_t q3 = (uint128_t)q * q * q;
+            uint128_t g = uint128_gcd(p3 - 1, q3 - 1);
+            uint64_t R = g > (n - 1) ? (n - 1) : (n - 1) % g;
+            uint128_t A = (uint128_t)n * (n + 1) + 1;
+            A = g > A ? A : A % g;
+            if (R < 3 || (p != 5 && R == 4) || (p < V_COUNT && R < V[p]) || (q < V_COUNT && R < V[q]) ||
+                  (R < q - 1 && q % 10 == 1) || (R < p - 1 && p % 10 == 1) || A < 4)
+	    {
+		    skip_semiprime_count += 1;
+	    }
+	    else
+            {
+		    semiprime_count += 1;
+                verify_all_a(n, p, q, g, R, A);
+            }
+        }
+        // ------------------------------------------------------------------------------
+        // n has exactly 3 distinct factors p < q < r
+        // ------------------------------------------------------------------------------
+        else if (0 && is_tripleprime(f))
+        {
+            // todo
+            uint64_t p = f[0].prime;
+            uint64_t q = f[1].prime;
+            uint64_t r = f[2].prime;
+        }
+        else
+        {
+            // ------------------------------------------------------------------------------
+            // n is composite
+            // iterate over all prime factors of n
+            // ------------------------------------------------------------------------------
+            for (uint64_t i = 0; i < f.size(); i++)
+            {
                 uint64_t p = f[i].prime;
                 uint64_t Q = n / p;
-                if (f.size() == 2 && p == f[1].prime && Q == f[0].prime)
-                {
-                    // avoid double computation in the case of semiprimes
-                    continue;
-                }
                 uint128_t p3 = (uint128_t)p * p * p;
                 uint128_t Q3 = (uint128_t)Q * Q * Q;
                 uint128_t g = uint128_gcd(p3 - 1, Q3 - 1);
@@ -332,126 +462,34 @@ int main(int argc, char **argv)
                     A = g > A ? A : A % g;
                     if (A > 3)
                     {
-                        struct barrett_t bn;
-                        barrett_precompute(&bn, n);
-                        //
-                        // TODO : start a child thread from here
-                        //
-                        uint64_t a = 7;
-                        for (uint64_t d = 0; d < n; d += 2)
-                        {
-                            // a = 7 + k * (k-1) unrolled as  a = a + 2k
-                            a += d;
-                            a -= (a >= n) ? n : 0;
-
-                            // verify test Mod(a,n)^R == 1
-                            modexp_count += 1;
-                            if (barrett_pow(a, R, bn) == 1)
-                            {
-                                exponentiate_count += 1;
-                                // run cubic test
-                                // B = Mod(x, n)
-                                uint64_t bs = 0;
-                                uint64_t bt = 1;
-                                uint64_t bu = 0;
-                                // B = Mod(B, x^3 -ax -a)^R
-                                cubic_exponentiate(bs, bt, bu, R, n, a);
-                                // B2 = B
-                                uint64_t bs2 = bs;
-                                uint64_t bt2 = bt;
-                                uint64_t bu2 = bu;
-                                // B2 = Mod(B2, x^3 -ax -a)^2
-                                cubic_exponentiate(bs2, bt2, bu2, 2, n, a);
-                                // check B2+B+1 is NOT -x^2 + x + 1
-                                bs2 = uint64_add_mod(bs2, bs, n);
-                                if (bs2 == n - 1)
-                                {
-                                    bt2 = uint64_add_mod(bt2, bt, n);
-                                    if (bt2 == 1)
-                                    {
-                                        bu2 = uint64_add_mod(bu2, bu + 1, n);
-                                        if (bu2 == a)
-                                        {
-                                            // Aoutch, n = p*Q could be prime or pseudoprime ??!!??!!
-                                            char buff[256];
-                                            char *ptr = buff;
-                                            *ptr++ = '[';
-                                            ptr += uint128_sprint(ptr, n);
-                                            *ptr++ = ',';
-                                            ptr += uint128_sprint(ptr, p);
-                                            *ptr++ = ',';
-                                            ptr += uint128_sprint(ptr, Q);
-                                            *ptr++ = ',';
-                                            ptr += uint128_sprint(ptr, g);
-                                            *ptr++ = ',';
-                                            ptr += uint128_sprint(ptr, R);
-                                            *ptr++ = ',';
-                                            ptr += uint128_sprint(ptr, A);
-                                            *ptr++ = ']';
-                                            *ptr = 0;
-                                            printf("%s\n", buff);
-                                            fflush(stdout);
-
-                                            // got 1 counter-example, it is time to stop
-                                            exit(1);
-                                        }
-                                        else
-                                        {
-                                            // polynomial test :
-                                            // n is composite for sure
-                                        }
-                                    }
-                                    else
-                                    {
-                                        // polynomial test :
-                                        // n is composite for sure
-                                    }
-                                }
-                                else
-                                {
-                                    // polynomial test :
-                                    // n is composite for sure
-                                }
-                            }
-                            else
-                            {
-                                // modexp test :
-                                // n is composite for sure
-                            }
-                        }
-                    }
-                }
-
-                // after 30 minutes, update the temp files.
-                // In case of crash, just restarting the program without parameter would restart from last saved values
-                time_t t1 = time(NULL);
-                if (t1 - t0 >= interval_seconds)
-                {
-                    if (!write_file(temp_filename1, temp_filename2, n, i, n_max, interval_seconds))
-                    {
-                        printf("Unable to write the file for restart after crash (%s)\n", temp_filename1);
-                    }
-                    else
-                    {
-                        t0 = t1;
+                        verify_all_a(n, p, Q, g, R, A);
                     }
                 }
             }
         }
 
-        // next n, not a multiple of 3, not a multiple of 2, and composite
-        do
+        // after 30 minutes, update the temp files.
+        // In case of crash, just restarting the program without parameter would restart from last saved values
+        time_t t1 = time(NULL);
+        if (t1 - t0 >= interval_seconds)
         {
-            n += dn;
-            dn = 6 - dn;
-        } while (uint64_small_factor(n) == 1 || uint64_is_prime(n));
+            if (!write_file(temp_filename1, temp_filename2, n, n_max, interval_seconds))
+            {
+                printf("Unable to write the file for restart after crash (%s)\n", temp_filename1);
+            }
+            else
+            {
+                t0 = t1;
+            }
+        }
 
-        // restart next number from first proper factor
-        i_start = 0;
+        // next n, not a multiple of 3, not a multiple of 2
+        n += dn;
+        dn = 6 - dn;
     }
 
     // update the restart file after the last iterations
-    if (!write_file(temp_filename1, temp_filename2, n, i_start, n_max, interval_seconds))
+    if (!write_file(temp_filename1, temp_filename2, n, n_max, interval_seconds))
     {
         printf("Unable to write the file for restart after crash (%s)\n", temp_filename1);
     }
@@ -463,9 +501,11 @@ int main(int argc, char **argv)
     //       ./all_a
     //       done
 
-    // debug : verifies visually the number of "modexps" and "cubic exponentiates"
+    // debug : verifies visually the number of "modexps" and "cubic exponentiates" and other values
     printf("modexp count ........... : %20ld\n", modexp_count);
     printf("exponentiate count ..... : %20ld\n", exponentiate_count);
+    printf("semiprime count ........ : %20ld\n", semiprime_count);
+    printf("skip semiprime count ... : %20ld\n", skip_semiprime_count);
 
     return (0);
 }
