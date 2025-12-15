@@ -63,6 +63,58 @@ static void cubic_exponentiate(uint64_t &s, uint64_t &t, uint64_t &u, uint64_t e
         t = uint128_long_mod(tt, n);
         u = uint128_long_mod(uu, n);
     }
+
+    // make sure the result is reduced
+    s = uint64_long_mod(0, s, n);
+    t = uint64_long_mod(0, t, n);
+    u = uint64_long_mod(0, u, n);
+}
+
+static void barrett_cubic_exponentiate(uint64_t &s, uint64_t &t, uint64_t &u, uint64_t e, const barrett_t &bt, uint64_t a)
+{
+    int bit = uint64_log_2(e);
+    uint64_t tmp;
+    uint128_t s2, t2, u2, st, tu, us, uu, ss, tt;
+    while (bit--)
+    {
+        // start Square
+        tmp = barrett_mul_mod(s, s, bt);
+        s2 = (uint128_t)tmp * a;
+        t2 = (uint128_t)t * t;
+        u2 = (uint128_t)u * u;
+        tmp = barrett_mul_mod(s, t, bt);
+        st = (uint128_t)tmp * a;
+        tu = (uint128_t)t * u;
+        us = (uint128_t)u * s;
+        st <<= 1;
+        tu <<= 1;
+        us <<= 1;
+        if (e & (1ull << bit))
+        {
+            // finish Square and multiply by x
+            us = s2 + us + t2;
+            tmp = barrett_long_mod(us, bt);
+            uu = (uint128_t)tmp * a;
+            ss = s2 + st + tu;
+            tt = uu + u2 + st;
+        }
+        else
+        {
+            // finish Square
+            ss = s2 + us + t2;
+            tt = s2 + st + tu;
+            uu = st + u2;
+        }
+        // make sure the result s,t,u is <= 2 * m
+        s = barrett_long_mod(ss, bt);
+        t = barrett_long_mod(tt, bt);
+        u = barrett_long_mod(uu, bt);
+    }
+
+    // make sure the result s,t,u is < m
+    s = uint64_long_mod(0, s, bt.m);
+    t = uint64_long_mod(0, t, bt.m);
+    u = uint64_long_mod(0, u, bt.m);
 }
 
 // read file, cautious about corruped or truncated files
@@ -225,13 +277,13 @@ void verify_all_a(uint64_t n, uint64_t R_fermat, uint64_t R_cubic)
             uint64_t bt = 1;
             uint64_t bu = 0;
             // B = Mod(B, x^3 -ax -a)^R_cubic
-            cubic_exponentiate(bs, bt, bu, R_cubic, n, a);
+            barrett_cubic_exponentiate(bs, bt, bu, R_cubic, bn, a);
             // B2 = B
             uint64_t bs2 = bs;
             uint64_t bt2 = bt;
             uint64_t bu2 = bu;
             // B2 = Mod(B2, x^3 -ax -a)^2
-            cubic_exponentiate(bs2, bt2, bu2, 2, n, a);
+            barrett_cubic_exponentiate(bs2, bt2, bu2, 2, bn, a);
             // check B2+B+1 is NOT -x^2 + x + 1
             bs2 = uint64_add_mod(bs2, bs, n);
             if (bs2 == n - 1)

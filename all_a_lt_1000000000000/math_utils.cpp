@@ -675,18 +675,18 @@ static void barrett_precompute(struct barrett_t *p, uint64_t m)
     p->n = 1 + uint64_log_2(m);
     if (p->n <= 29)
     {
-        // simple Barrett,
+        // Barrett precomputations
         p->n2 = (p->n + 1) << 1;
-        p->n32 = 0;
+        p->n32 = p->n + (p->n >> 1);
         p->n321 = 0;
+        p->r = ((uint128_t)1 << p->n2) % m;
         p->q = (1ull << p->n2) / m;
-        p->r = 0;
         return;
     }
 
     if (p->n < 42)
     {
-        // modified Barrett
+        // modified Barrett precomputations
         p->n2 = p->n << 1;
         p->n32 = p->n + (p->n >> 1);
         p->n321 = p->n32 + 1;
@@ -735,6 +735,48 @@ static uint64_t barrett_mul_mod(uint64_t u, uint64_t v, const struct barrett_t &
     // assume u, v <= 2 * m
     // makes r <= 2 * m
     return mul_mod(u, v, bt.m); // assume u*v < (2^64-1)*m , i.e. worst case m < 63 bits
+}
+
+// modular reduction
+static uint64_t barrett_long_mod(uint128_t u, const struct barrett_t &bt)
+{
+    if (bt.n < 30)
+    {
+        // makes u <= (2m)^2 approx
+	    while (u >> bt.n2)
+	    {
+        uint64_t u_lo = u & ((1ull << bt.n2) - 1);   
+        uint64_t u_hi = u >> bt.n2;                   
+        u = u_hi * bt.r + u_lo;               
+	    }
+        // makes r <= 2 * m
+        uint64_t r = u;
+        uint64_t e = ((uint128_t)r * bt.q) >> bt.n2;
+        r -= e * bt.m; // barrett subtraction without underflow
+        return r;
+    }
+
+    if (bt.n < 42)
+    {
+        // makes u <= (2*m) ^ 3/2 approx
+	    while (u >> bt.n32)
+	    {
+        uint64_t u_lo = u & ((1ull << bt.n32) - 1);    
+        uint128_t u_hi = u >> bt.n32;                   
+        u = u_hi * bt.r + u_lo;               
+	    }
+        // makes r <= 2 * m
+	uint64_t r = (uint64_t)u;
+        uint64_t e = ((uint128_t)bt.q * r) >> bt.n321; 
+        r -= e * bt.m; // barrett subtraction without underflow
+        return r - ((r >= bt.m) ? bt.m : 0);
+    }
+
+    // fall-back
+    // no optimisation (2 asm instructions, including a slow long division)
+    // assume u, v <= 2 * m
+    // makes r <= 2 * m
+    return uint128_long_mod(u, bt.m); // assume u*v < (2^64-1)*m , i.e. worst case m < 63 bits
 }
 
 // modular exponentiation a^e mod m with precomputations
