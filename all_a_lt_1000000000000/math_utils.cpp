@@ -743,12 +743,12 @@ static uint64_t barrett_long_mod(uint128_t u, const struct barrett_t &bt)
     if (bt.n < 30)
     {
         // makes u <= (2m)^2 approx
-	    while (u >> bt.n2)
-	    {
-        uint64_t u_lo = u & ((1ull << bt.n2) - 1);   
-        uint64_t u_hi = u >> bt.n2;                   
-        u = u_hi * bt.r + u_lo;               
-	    }
+        while (u >> bt.n2)
+        {
+            uint64_t u_lo = u & ((1ull << bt.n2) - 1);
+            uint64_t u_hi = u >> bt.n2;
+            u = u_hi * bt.r + u_lo;
+        }
         // makes r <= 2 * m
         uint64_t r = u;
         uint64_t e = ((uint128_t)r * bt.q) >> bt.n2;
@@ -759,15 +759,15 @@ static uint64_t barrett_long_mod(uint128_t u, const struct barrett_t &bt)
     if (bt.n < 42)
     {
         // makes u <= (2*m) ^ 3/2 approx
-	    while (u >> bt.n32)
-	    {
-        uint64_t u_lo = u & ((1ull << bt.n32) - 1);    
-        uint128_t u_hi = u >> bt.n32;                   
-        u = u_hi * bt.r + u_lo;               
-	    }
+        while (u >> bt.n32)
+        {
+            uint64_t u_lo = u & ((1ull << bt.n32) - 1);
+            uint128_t u_hi = u >> bt.n32;
+            u = u_hi * bt.r + u_lo;
+        }
         // makes r <= 2 * m
-	uint64_t r = (uint64_t)u;
-        uint64_t e = ((uint128_t)bt.q * r) >> bt.n321; 
+        uint64_t r = (uint64_t)u;
+        uint64_t e = ((uint128_t)bt.q * r) >> bt.n321;
         r -= e * bt.m; // barrett subtraction without underflow
         return r - ((r >= bt.m) ? bt.m : 0);
     }
@@ -783,7 +783,8 @@ static uint64_t barrett_long_mod(uint128_t u, const struct barrett_t &bt)
 // intermediate numbers are less than (3 * m)
 static uint64_t barrett_pow_mod(uint64_t a, uint64_t e, const barrett_t &bt)
 {
-    if (e == 0) return 1;
+    if (e == 0)
+        return 1;
     uint64_t bits = uint64_log_2(e);
     uint64_t result = a;
     while (bits--)

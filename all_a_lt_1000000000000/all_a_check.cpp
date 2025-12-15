@@ -13,12 +13,14 @@
 // -----------------------------------------------------------------------
 
 #include <assert.h>
-#include <omp.h>
 
 #include "math_utils.cpp"
 
 #include "v_table.cpp"
 #define V_COUNT (sizeof(V) / sizeof(V[0]))
+
+#include <pthread.h>
+#include <semaphore.h>
 
 // compute Mod(Mod(x, n), x^3 -a*x -a)^e
 // assume n is less than 60 or 61 bits
@@ -70,7 +72,9 @@ static void cubic_exponentiate(uint64_t &s, uint64_t &t, uint64_t &u, uint64_t e
     u = uint64_long_mod(0, u, n);
 }
 
-static void barrett_cubic_exponentiate(uint64_t &s, uint64_t &t, uint64_t &u, uint64_t e, const barrett_t &bt, uint64_t a)
+// compute Mod(Mod(x, n), x^3 -a*x -a)^e with Barrett reduction
+static void barrett_cubic_exponentiate(uint64_t &s, uint64_t &t, uint64_t &u, uint64_t e, const barrett_t &bt,
+                                       uint64_t a)
 {
     int bit = uint64_log_2(e);
     uint64_t tmp;
@@ -117,31 +121,32 @@ static void barrett_cubic_exponentiate(uint64_t &s, uint64_t &t, uint64_t &u, ui
     u = uint64_long_mod(0, u, bt.m);
 }
 
+// compute Mod(Mod(x, n), x^3 -a*x -a)^2 with Barrett reduction
 static void barrett_cubic_square(uint64_t &s, uint64_t &t, uint64_t &u, const barrett_t &bt, uint64_t a)
 {
     uint64_t tmp;
     uint128_t s2, t2, u2, st, tu, us, uu, ss, tt;
 
-        // start Square
-        tmp = barrett_mul_mod(s, s, bt);
-        s2 = (uint128_t)tmp * a;
-        t2 = (uint128_t)t * t;
-        u2 = (uint128_t)u * u;
-        tmp = barrett_mul_mod(s, t, bt);
-        st = (uint128_t)tmp * a;
-        tu = (uint128_t)t * u;
-        us = (uint128_t)u * s;
-        st <<= 1;
-        tu <<= 1;
-        us <<= 1;
-        // finish Square
-            ss = s2 + us + t2;
-            tt = s2 + st + tu;
-            uu = st + u2;
-        // make sure the result s,t,u is < m
-        s = uint128_long_mod(ss, bt.m);
-        t = uint128_long_mod(tt, bt.m);
-        u = uint128_long_mod(uu, bt.m);
+    // start Square
+    tmp = barrett_mul_mod(s, s, bt);
+    s2 = (uint128_t)tmp * a;
+    t2 = (uint128_t)t * t;
+    u2 = (uint128_t)u * u;
+    tmp = barrett_mul_mod(s, t, bt);
+    st = (uint128_t)tmp * a;
+    tu = (uint128_t)t * u;
+    us = (uint128_t)u * s;
+    st <<= 1;
+    tu <<= 1;
+    us <<= 1;
+    // finish Square
+    ss = s2 + us + t2;
+    tt = s2 + st + tu;
+    uu = st + u2;
+    // make sure the result s,t,u is < m
+    s = uint128_long_mod(ss, bt.m);
+    t = uint128_long_mod(tt, bt.m);
+    u = uint128_long_mod(uu, bt.m);
 }
 
 // read file, cautious about corruped or truncated files
@@ -368,6 +373,200 @@ void verify_all_a(uint64_t n, uint64_t R_fermat, uint64_t R_cubic)
 
 // -----------------------------------------------------------------
 //
+// multithread wrapper
+//
+// -----------------------------------------------------------------
+
+#define MT_THREAD_COUNT 4 // a power of 2
+#define MT_QUEUE_SIZE (2 * MT_THREAD_COUNT)
+
+struct ring_entry_t
+{
+    uint64_t __attribute__((aligned(64))) n;
+    uint64_t R_fermat;
+    uint64_t R_cubic;
+};
+
+struct mod_multithread_t
+{
+    pthread_cond_t __attribute__((aligned(64))) start_cond, done_cond;
+    pthread_mutex_t __attribute__((aligned(64))) start_mutex, done_mutex;
+    volatile unsigned long __attribute__((aligned(64))) start_queue_head, start_queue_tail;
+    volatile unsigned long __attribute__((aligned(64))) done_queue_head, done_queue_tail;
+    sem_t __attribute__((aligned(64))) start_sem, done_sem;
+    struct ring_entry_t start_queue[MT_QUEUE_SIZE];
+    struct ring_entry_t done_queue[MT_QUEUE_SIZE];
+
+    uint64_t display;
+    time_t d0;
+};
+
+static void mod_multithread_notify_ready(mod_multithread_t *mt, const struct ring_entry_t &job)
+{
+    sem_wait(&mt->start_sem);
+    pthread_mutex_lock(&mt->start_mutex);
+    // printf("Notify Ready %ld\n", job.n);
+    mt->start_queue[mt->start_queue_head++ & (MT_QUEUE_SIZE - 1)] = job;
+    pthread_mutex_unlock(&mt->start_mutex);
+    pthread_cond_signal(&mt->start_cond);
+}
+
+static void mod_multithread_notify_done(mod_multithread_t *mt, const struct ring_entry_t &job)
+{
+    sem_wait(&mt->done_sem);
+    pthread_mutex_lock(&mt->done_mutex);
+    // printf("Job done %ld\n", job.n);
+    mt->done_queue[mt->done_queue_head++ & (MT_QUEUE_SIZE - 1)] = job;
+    pthread_mutex_unlock(&mt->done_mutex);
+    pthread_cond_signal(&mt->done_cond);
+    sem_post(&mt->done_sem);
+}
+
+static struct ring_entry_t mod_multithread_get_job(mod_multithread_t *mt)
+{
+    struct ring_entry_t job;
+    pthread_mutex_lock(&mt->start_mutex);
+    while (mt->start_queue_tail == mt->start_queue_head)
+    {
+        pthread_cond_wait(&mt->start_cond, &mt->start_mutex);
+    }
+    job = mt->start_queue[mt->start_queue_tail++ & (MT_QUEUE_SIZE - 1)];
+    // printf("Get job %ld\n", job.n);
+    pthread_mutex_unlock(&mt->start_mutex);
+    sem_post(&mt->start_sem);
+    return job;
+}
+
+static struct ring_entry_t mod_multithread_get_result(mod_multithread_t *mt)
+{
+    struct ring_entry_t job;
+    pthread_mutex_lock(&mt->done_mutex);
+    while (mt->done_queue_tail == mt->done_queue_head)
+    {
+        pthread_cond_wait(&mt->done_cond, &mt->done_mutex);
+    }
+    job = mt->done_queue[mt->done_queue_tail++ & (MT_QUEUE_SIZE - 1)];
+    // printf("Get result %ld\n", job.n);
+    pthread_mutex_unlock(&mt->done_mutex);
+    sem_post(&mt->done_sem);
+    return job;
+}
+
+static struct mod_multithread_t mt;
+static pthread_t mt_tids[MT_THREAD_COUNT];
+
+void *mt_worker(void *)
+{
+    struct ring_entry_t job;
+
+    while (1)
+    {
+        // get a new job
+        job = mod_multithread_get_job(&mt);
+        if (job.n == 0)
+            break;
+        verify_all_a(job.n, job.R_fermat, job.R_cubic);
+        // job is done, tell the main thread
+        mod_multithread_notify_done(&mt, job);
+    }
+    return 0;
+}
+
+void drain_done_queue(mod_multithread_t *mt)
+{
+    // best effort, non blocking attempt to drain whatever is in the queue
+    while (mt->done_queue_tail != mt->done_queue_head)
+    {
+        struct ring_entry_t job = mod_multithread_get_result(mt);
+
+        // multiple thread progress is approximative and out of order
+        if (++mt->display > 1000)
+        {
+            time_t d1 = time(NULL);
+            printf("completed n = %ld, %ld\n", job.n, d1 - mt->d0);
+            mt->display = 0;
+            mt->d0 = d1;
+        }
+    }
+}
+
+void mt_initialize(void)
+{
+    mt.start_cond = PTHREAD_COND_INITIALIZER;
+    mt.done_cond = PTHREAD_COND_INITIALIZER;
+    mt.start_mutex = PTHREAD_MUTEX_INITIALIZER;
+    mt.done_mutex = PTHREAD_MUTEX_INITIALIZER;
+    mt.start_queue_head = 0;
+    mt.start_queue_tail = 0;
+    mt.done_queue_head = 0;
+    mt.done_queue_tail = 0;
+    sem_init(&mt.start_sem, 0, MT_QUEUE_SIZE);
+    sem_init(&mt.done_sem, 0, MT_QUEUE_SIZE);
+
+    mt.display = 0;
+    mt.d0 = time(NULL);
+
+    // kick-off the worker threads
+    for (unsigned i = 0; i < MT_THREAD_COUNT; i++)
+    {
+        pthread_create(&mt_tids[i], 0, mt_worker, &mt);
+    }
+}
+
+void mt_debug_display(void)
+{
+    printf("MT jobs requested ............ : %20ld\n", mt.start_queue_head);
+    printf("MT jobs completed ............ : %20ld\n", mt.done_queue_head);
+    printf("\n");
+}
+
+void mt_terminate(void)
+{
+    struct ring_entry_t job;
+    // gracefully stop the worker loops
+    for (unsigned i = 0; i < MT_THREAD_COUNT; i++)
+    {
+        job.n = 0;
+        job.R_fermat = 0;
+        job.R_cubic = 0;
+        mod_multithread_notify_ready(&mt, job);
+    }
+
+    // wait for the worker thread terminations
+    for (unsigned i = 0; i < MT_THREAD_COUNT; i++)
+    {
+        pthread_join(mt_tids[i], 0);
+    }
+
+    drain_done_queue(&mt);
+
+    // clean resources
+    sem_destroy(&mt.start_sem);
+    sem_destroy(&mt.done_sem);
+}
+
+void mt_verify_all_a(uint64_t n, uint64_t R_fermat, uint64_t R_cubic)
+{
+#if 1
+    // best effort, check there is possibly something in the response queue
+    drain_done_queue(&mt);
+
+    // enqueue a new request
+    struct ring_entry_t job;
+
+    job.n = n;
+    job.R_fermat = R_fermat;
+    job.R_cubic = R_cubic;
+    mod_multithread_notify_ready(&mt, job);
+#else
+    // debug : ino work for worker threads, run in the thread context
+    verify_all_a(n, R_fermat, R_cubic);
+
+#endif
+}
+
+// -----------------------------------------------------------------
+//
 // entry point
 //
 // -----------------------------------------------------------------
@@ -467,6 +666,8 @@ int main(int argc, char **argv)
     worked_semiprime_count = 0;
     skip_semiprime_count = 0;
 
+    mt_initialize();
+
     // temporary vector of factors
     factor_v f;
     f.reserve(64); // preallocate the vector, no further reallocations
@@ -479,11 +680,11 @@ int main(int argc, char **argv)
 
     while (n <= n_max)
     {
-        // single thread progress
+        // master thread progress (in order)
         if (++display > 10000)
         {
             time_t d1 = time(NULL);
-            printf("n = %ld, %ld\n", n, d1 - d0);
+            printf("start n = %ld, %ld\n", n, d1 - d0);
             display = 0;
             d0 = d1;
         }
@@ -516,7 +717,7 @@ int main(int argc, char **argv)
                   (Q < V_COUNT && R < V[Q]) || (R < Q - 1 && Q % 10 != 1) || A < 4))
             {
                 worked_semiprime_count += 1;
-                verify_all_a(n, R, R);
+                mt_verify_all_a(n, R, R);
             }
             else
             {
@@ -554,7 +755,7 @@ int main(int argc, char **argv)
             {
                 // no early termination
                 worked_squarefree_count += 1;
-                verify_all_a(n, Rmin, Rmin);
+                mt_verify_all_a(n, Rmin, Rmin);
             }
             else
             {
@@ -593,7 +794,7 @@ int main(int argc, char **argv)
             else
             {
                 worked_composite_count += 1;
-                verify_all_a(n, n - 1, Rmin);
+                mt_verify_all_a(n, n - 1, Rmin); // TODO : is it 0 or n-1 ???
             }
         }
 
@@ -617,6 +818,8 @@ int main(int argc, char **argv)
         dn = 6 - dn;
     }
 
+    mt_terminate();
+
     // update the restart file after the last iterations
     if (!write_file(temp_filename1, temp_filename2, n, n_max, interval_seconds))
     {
@@ -639,6 +842,10 @@ int main(int argc, char **argv)
     printf("skip squarefree count ........ : %20ld\n", skip_squarefree_count);
     printf("worked composite count ....... : %20ld\n", worked_composite_count);
     printf("skip composite count ......... : %20ld\n", skip_composite_count);
+    printf("\n");
+
+    // debug : verifies visually the number of multithread jobs done
+    mt_debug_display();
 
     return (0);
 }
