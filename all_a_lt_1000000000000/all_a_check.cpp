@@ -202,7 +202,7 @@ static uint64_t worked_composite_count = 0;
 //
 // -----------------------------------------------------------------
 
-void verify_all_a(uint64_t n, uint64_t R)
+void verify_all_a(uint64_t n, uint64_t R_fermat, uint64_t R_cubic)
 {
 
     struct barrett_t bn;
@@ -214,9 +214,9 @@ void verify_all_a(uint64_t n, uint64_t R)
         a += d;
         a -= (a >= n) ? n : 0;
 
-        // verify test Mod(a,n)^R == 1
+        // verify test Mod(a,n)^R_fermat == 1
         modexp_count += 1;
-        if (barrett_pow_mod(a, R, bn) == 1)
+        if (barrett_pow_mod(a, R_fermat, bn) == 1)
         {
             exponentiate_count += 1;
             // run cubic test
@@ -224,8 +224,8 @@ void verify_all_a(uint64_t n, uint64_t R)
             uint64_t bs = 0;
             uint64_t bt = 1;
             uint64_t bu = 0;
-            // B = Mod(B, x^3 -ax -a)^R
-            cubic_exponentiate(bs, bt, bu, R, n, a);
+            // B = Mod(B, x^3 -ax -a)^R_cubic
+            cubic_exponentiate(bs, bt, bu, R_cubic, n, a);
             // B2 = B
             uint64_t bs2 = bs;
             uint64_t bt2 = bt;
@@ -250,7 +250,9 @@ void verify_all_a(uint64_t n, uint64_t R)
                         *ptr++ = ',';
                         ptr += uint128_sprint(ptr, a);
                         *ptr++ = ',';
-                        ptr += uint128_sprint(ptr, R);
+                        ptr += uint128_sprint(ptr, R_fermat);
+                        *ptr++ = ',';
+                        ptr += uint128_sprint(ptr, R_cubic);
                         *ptr++ = ']';
                         *ptr = 0;
                         printf("%s\n", buff);
@@ -435,7 +437,7 @@ int main(int argc, char **argv)
                   (Q < V_COUNT && R < V[Q]) || (R < Q - 1 && Q % 10 != 1) || A < 4))
             {
                 worked_semiprime_count += 1;
-                verify_all_a(n, R);
+                verify_all_a(n, R, R);
             }
             else
             {
@@ -445,7 +447,7 @@ int main(int argc, char **argv)
         else if (is_squarefree(f))
         {
             // ------------------------------------------------------------------------------
-            // n factors have multiplicity 1
+            // All factors have multiplicity 1
             // ------------------------------------------------------------------------------
             uint64_t Rmin = n - 1;
             uint128_t An = (uint128_t)n * (n + 1) + 1;
@@ -473,7 +475,7 @@ int main(int argc, char **argv)
             {
                 // no early termination
                 worked_squarefree_count += 1;
-                verify_all_a(n, Rmin);
+                verify_all_a(n, Rmin, Rmin);
             }
             else
             {
@@ -484,9 +486,11 @@ int main(int argc, char **argv)
         {
             // ------------------------------------------------------------------------------
             // general case : n is composite
-            // iterate over all prime proper factors of n
+            // iterate over all prime proper factors p of n
             // ------------------------------------------------------------------------------
-            for (uint64_t i = 0; i < f.size(); i++)
+            uint64_t Rmin = n - 1;
+            uint64_t i;
+            for (i = 0; i < f.size(); i++)
             {
                 uint64_t p = f[i].prime;
                 uint64_t Q = n / p;
@@ -494,24 +498,23 @@ int main(int argc, char **argv)
                 uint128_t Q3 = (uint128_t)Q * Q * Q;
                 uint128_t g = uint128_gcd(p3 - 1, Q3 - 1);
                 uint64_t R = g > (n - 1) ? (n - 1) : (n - 1) % g;
-                if (R > 2)
+                if (R < 3 || (p != 5 && R == 4) || (p < V_COUNT && R < V[p]) || (R < p - 1 && p % 10 != 1))
                 {
-                    uint128_t A = (uint128_t)n * (n + 1) + 1;
-                    A = g > A ? A : A % g;
-                    if (A > 3)
-                    {
-                        worked_composite_count += 1;
-                        verify_all_a(n, R);
-                    }
-                    else
-                    {
-                        skip_composite_count += 1;
-                    }
+                    break;
                 }
-                else
+                if (R < Rmin)
                 {
-                    skip_composite_count += 1;
+                    Rmin = R;
                 }
+            }
+            if (i != f.size())
+            {
+                skip_composite_count += 1;
+            }
+            else
+            {
+                worked_composite_count += 1;
+                verify_all_a(n, n - 1, Rmin);
             }
         }
 

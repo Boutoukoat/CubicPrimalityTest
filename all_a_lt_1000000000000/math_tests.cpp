@@ -499,39 +499,39 @@ static int self_test_64(void)
     t = uint64_isqrt(s * s);
     if (t != s)
     {
-	    return -1;
+        return -1;
     }
 
     t = uint64_isqrt(s * s + 1);
     if (t != s)
     {
-	    return -1;
+        return -1;
     }
 
     s = 0x4321;
     t = uint64_isqrt(s * s);
     if (t != s)
     {
-	    return -1;
+        return -1;
     }
 
     t = uint64_isqrt(s * s + 1);
     if (t != s)
     {
-	    return -1;
+        return -1;
     }
 
     s = 0x7654321;
     t = uint64_isqrt(s * s);
     if (t != s)
     {
-	    return -1;
+        return -1;
     }
 
     t = uint64_isqrt(s * s + 1);
     if (t != s)
     {
-	    return -1;
+        return -1;
     }
 
     printf("Factors ...\n");
