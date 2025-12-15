@@ -117,6 +117,33 @@ static void barrett_cubic_exponentiate(uint64_t &s, uint64_t &t, uint64_t &u, ui
     u = uint64_long_mod(0, u, bt.m);
 }
 
+static void barrett_cubic_square(uint64_t &s, uint64_t &t, uint64_t &u, const barrett_t &bt, uint64_t a)
+{
+    uint64_t tmp;
+    uint128_t s2, t2, u2, st, tu, us, uu, ss, tt;
+
+        // start Square
+        tmp = barrett_mul_mod(s, s, bt);
+        s2 = (uint128_t)tmp * a;
+        t2 = (uint128_t)t * t;
+        u2 = (uint128_t)u * u;
+        tmp = barrett_mul_mod(s, t, bt);
+        st = (uint128_t)tmp * a;
+        tu = (uint128_t)t * u;
+        us = (uint128_t)u * s;
+        st <<= 1;
+        tu <<= 1;
+        us <<= 1;
+        // finish Square
+            ss = s2 + us + t2;
+            tt = s2 + st + tu;
+            uu = st + u2;
+        // make sure the result s,t,u is < m
+        s = uint128_long_mod(ss, bt.m);
+        t = uint128_long_mod(tt, bt.m);
+        u = uint128_long_mod(uu, bt.m);
+}
+
 // read file, cautious about corruped or truncated files
 bool read_file(char *fn, uint64_t *n, uint64_t *m, uint64_t *s)
 {
@@ -283,7 +310,7 @@ void verify_all_a(uint64_t n, uint64_t R_fermat, uint64_t R_cubic)
             uint64_t bt2 = bt;
             uint64_t bu2 = bu;
             // B2 = Mod(B2, x^3 -ax -a)^2
-            barrett_cubic_exponentiate(bs2, bt2, bu2, 2, bn, a);
+            barrett_cubic_square(bs2, bt2, bu2, bn, a);
             // check B2+B+1 is NOT -x^2 + x + 1
             bs2 = uint64_add_mod(bs2, bs, n);
             if (bs2 == n - 1)
