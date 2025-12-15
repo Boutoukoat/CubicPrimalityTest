@@ -8,7 +8,7 @@
 //    for(k=1,(n+1)/2,
 //     if(k%3!=2,a=(7+k*(k-1))%n;
 //      if(Mod(a,n)^R==1,B=Mod(Mod(x,n),x^3-a*x-a)^R;
-//       if(B^2+B+1==-x^2+x+a.print([n,p,Q,g,R,A]);break(7)))))))));}
+//       if(B^2+B+1==-x^2+x+a,print([n,p,Q,g,R,A]);break(7)))))))));}
 //
 // -----------------------------------------------------------------------
 
@@ -189,8 +189,12 @@ bool write_file(char *fn, char *bak, uint64_t n, uint64_t m, uint64_t s)
 
 static uint64_t modexp_count = 0;
 static uint64_t exponentiate_count = 0;
+static uint64_t skip_squarefree_count = 0;
+static uint64_t worked_squarefree_count = 0;
 static uint64_t skip_semiprime_count = 0;
-static uint64_t semiprime_count = 0;
+static uint64_t worked_semiprime_count = 0;
+static uint64_t skip_composite_count = 0;
+static uint64_t worked_composite_count = 0;
 
 // -----------------------------------------------------------------
 //
@@ -198,7 +202,7 @@ static uint64_t semiprime_count = 0;
 //
 // -----------------------------------------------------------------
 
-void verify_all_a(uint64_t n, uint64_t p, uint64_t Q, uint128_t g, uint64_t R, uint128_t A)
+void verify_all_a(uint64_t n, uint64_t R)
 {
 
     struct barrett_t bn;
@@ -244,15 +248,9 @@ void verify_all_a(uint64_t n, uint64_t p, uint64_t Q, uint128_t g, uint64_t R, u
                         *ptr++ = '[';
                         ptr += uint128_sprint(ptr, n);
                         *ptr++ = ',';
-                        ptr += uint128_sprint(ptr, p);
-                        *ptr++ = ',';
-                        ptr += uint128_sprint(ptr, Q);
-                        *ptr++ = ',';
-                        ptr += uint128_sprint(ptr, g);
+                        ptr += uint128_sprint(ptr, a);
                         *ptr++ = ',';
                         ptr += uint128_sprint(ptr, R);
-                        *ptr++ = ',';
-                        ptr += uint128_sprint(ptr, A);
                         *ptr++ = ']';
                         *ptr = 0;
                         printf("%s\n", buff);
@@ -381,8 +379,16 @@ int main(int argc, char **argv)
     uint64_t display = 0;
     modexp_count = 0;
     exponentiate_count = 0;
-    semiprime_count = 0;
+    worked_squarefree_count = 0;
+    skip_squarefree_count = 0;
+    worked_composite_count = 0;
+    skip_composite_count = 0;
+    worked_semiprime_count = 0;
     skip_semiprime_count = 0;
+
+    // temporary vector of factors
+    factor_v f;
+    f.reserve(64); // preallocate the vector, no further reallocations
 
     // update the restart file
     if (!write_file(temp_filename1, temp_filename2, n, n_max, interval_seconds))
@@ -400,55 +406,85 @@ int main(int argc, char **argv)
             display = 0;
             d0 = d1;
         }
-        factor_v f;
+
+        f.clear();
         uint64_all_factors(f, n);
-        if (f.size() < 2 || is_perfect_power(f) == true)
+        if (is_prime(f))
         {
             // ------------------------------------------------------------------------------
-            // prime or perfect power
+            // prime, we are not interested with.
             // ------------------------------------------------------------------------------
         }
-
         else if (is_semiprime(f))
         {
             // ------------------------------------------------------------------------------
-            // n has exactly 2 distinct factors p < q
+            // 2 factors have multiplicity 1   p < q
+            //
+            // input number is squarefree, but processing is greatly simplified when there are
+            // only 2 factors
             // ------------------------------------------------------------------------------
             uint64_t p = f[0].prime;
-            uint64_t q = f[1].prime;
+            uint64_t Q = f[1].prime;
             uint128_t p3 = (uint128_t)p * p * p;
-            uint128_t q3 = (uint128_t)q * q * q;
-            uint128_t g = uint128_gcd(p3 - 1, q3 - 1);
+            uint128_t Q3 = (uint128_t)Q * Q * Q;
+            uint128_t g = uint128_gcd(p3 - 1, Q3 - 1);
             uint64_t R = g > (n - 1) ? (n - 1) : (n - 1) % g;
-            uint128_t A = (uint128_t)n * (n + 1) + 1;
-            A = g > A ? A : A % g;
-            if (R < 3 || (p != 5 && R == 4) || (p < V_COUNT && R < V[p]) || (q < V_COUNT && R < V[q]) ||
-                (R < q - 1 && q % 10 == 1) || (R < p - 1 && p % 10 == 1) || A < 4)
+            uint128_t An = (uint128_t)n * (n + 1) + 1;
+            uint64_t A = g > An ? An : An % g;
+            if (!(R < 3 || (p != 5 && R == 4) || (p < V_COUNT && R < V[p]) || (R < p - 1 && p % 10 != 1) ||
+                  (Q < V_COUNT && R < V[Q]) || (R < Q - 1 && Q % 10 != 1) || A < 4))
             {
-                skip_semiprime_count += 1;
+                worked_semiprime_count += 1;
+                verify_all_a(n, R);
             }
             else
             {
-                semiprime_count += 1;
-                verify_all_a(n, p, q, g, R, A);
+                skip_semiprime_count += 1;
             }
         }
-        else if (0 && is_tripleprime(f))
+        else if (is_squarefree(f))
         {
             // ------------------------------------------------------------------------------
-            // n has exactly 3 distinct factors p < q < r
+            // n factors have multiplicity 1
             // ------------------------------------------------------------------------------
-
-            // todo
-            uint64_t p = f[0].prime;
-            uint64_t q = f[1].prime;
-            uint64_t r = f[2].prime;
+            uint64_t Rmin = n - 1;
+            uint128_t An = (uint128_t)n * (n + 1) + 1;
+            uint64_t i;
+            for (i = 0; i < f.size(); i++)
+            {
+                uint64_t p = f[i].prime;
+                uint64_t Q = n / p;
+                uint128_t p3 = (uint128_t)p * p * p;
+                uint128_t Q3 = (uint128_t)Q * Q * Q;
+                uint128_t g = uint128_gcd(p3 - 1, Q3 - 1);
+                uint64_t R = g > (n - 1) ? (n - 1) : (n - 1) % g;
+                uint64_t A = g > An ? An : An % g;
+                if (R < 3 || (p != 5 && R == 4) || (p < V_COUNT && R < V[p]) || (R < p - 1 && p % 10 != 1) || A < 4)
+                {
+                    // early terminate this number
+                    break;
+                }
+                if (R < Rmin)
+                {
+                    Rmin = R;
+                }
+            }
+            if (i == f.size())
+            {
+                // no early termination
+                worked_squarefree_count += 1;
+                verify_all_a(n, Rmin);
+            }
+            else
+            {
+                skip_squarefree_count += 1;
+            }
         }
         else
         {
             // ------------------------------------------------------------------------------
-            // n is composite
-            // iterate over all prime factors of n
+            // general case : n is composite
+            // iterate over all prime proper factors of n
             // ------------------------------------------------------------------------------
             for (uint64_t i = 0; i < f.size(); i++)
             {
@@ -464,14 +500,23 @@ int main(int argc, char **argv)
                     A = g > A ? A : A % g;
                     if (A > 3)
                     {
-                        verify_all_a(n, p, Q, g, R, A);
+                        worked_composite_count += 1;
+                        verify_all_a(n, R);
                     }
+                    else
+                    {
+                        skip_composite_count += 1;
+                    }
+                }
+                else
+                {
+                    skip_composite_count += 1;
                 }
             }
         }
 
         // after 30 minutes, update the temp files.
-        // In case of crash, just restarting the program without parameter would restart from last saved values
+        // In case of crash, just restarting the program without parameter would restart from the last saved values
         time_t t1 = time(NULL);
         if (t1 - t0 >= interval_seconds)
         {
@@ -506,8 +551,12 @@ int main(int argc, char **argv)
     // debug : verifies visually the number of "modexps" and "cubic exponentiates" and other values
     printf("modexp count ................. : %20ld\n", modexp_count);
     printf("cubic exponentiate count ..... : %20ld\n", exponentiate_count);
-    printf("semiprime count .............. : %20ld\n", semiprime_count);
+    printf("worked semiprime count ....... : %20ld\n", worked_semiprime_count);
     printf("skip semiprime count ......... : %20ld\n", skip_semiprime_count);
+    printf("worked squarefree count ...... : %20ld\n", worked_squarefree_count);
+    printf("skip squarefree count ........ : %20ld\n", skip_squarefree_count);
+    printf("worked composite count ....... : %20ld\n", worked_composite_count);
+    printf("skip composite count ......... : %20ld\n", skip_composite_count);
 
     return (0);
 }

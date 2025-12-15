@@ -452,8 +452,8 @@ static uint64_t uint64_isqrt(uint64_t x)
     // when fast log2 is floored.
     uint64_t log2x = uint64_log_2(x);
     uint64_t log2y = log2x / 2;
-    uint64_t y = 1 << log2y;
-    uint64_t y_squared = 1 << (2 * log2y);
+    uint64_t y = 1ul << log2y;
+    uint64_t y_squared = 1ul << (2 * log2y);
     int64_t sqr_diff = x - y_squared;
     // Perform lerp between powers of four
     y += (sqr_diff / 3) >> log2y;
@@ -468,10 +468,23 @@ static uint64_t uint64_isqrt(uint64_t x)
     {
         return y;
     }
+    // The estimate may still be too high
     y -= (-sqr_diff / (2 * y)) + 1;
-    // The estimate may still be 1 too high
     y_squared = y * y;
     sqr_diff = x - y_squared;
+    if (sqr_diff >= 0)
+    {
+        return y;
+    }
+    // The estimate may still be too high
+    y -= (-sqr_diff / (2 * y)) + 1;
+    y_squared = y * y;
+    sqr_diff = x - y_squared;
+    if (sqr_diff >= 0)
+    {
+        return y;
+    }
+    // The estimate may still be 1 too high
     return sqr_diff < 0 ? y - 1 : y;
 }
 
@@ -646,12 +659,13 @@ static uint64_t pow_mod(uint64_t a, uint64_t e, uint64_t m)
 
 struct barrett_t
 {
-    uint64_t m;   // modulus n bits
-    uint64_t q;   // quotient 2^(3n/2) / m
-    uint64_t r;   // remainder 2^(3n/2) % m
-    uint64_t n;   // modulus size
-    uint64_t n2;  // 1/2 modulus size
-    uint64_t n32; // 3/2 modulus size
+    uint64_t m;    // modulus n bits
+    uint64_t q;    // quotient 2^(3n/2) / m
+    uint64_t r;    // remainder 2^(3n/2) % m
+    uint64_t n;    // modulus size
+    uint64_t n2;   // 1/2 modulus size
+    uint64_t n32;  // 3/2 modulus size
+    uint64_t n321; // n32+1
 };
 
 static void barrett_precompute(struct barrett_t *p, uint64_t m)
@@ -659,11 +673,12 @@ static void barrett_precompute(struct barrett_t *p, uint64_t m)
     // precompute a variant of Barrett reduction
     p->m = m;
     p->n = 1 + uint64_log_2(m);
-    p->n2 = p->n << 1;
-    if (p->n <= 31)
+    if (p->n <= 29)
     {
         // simple Barrett,
+        p->n2 = (p->n + 1) << 1;
         p->n32 = 0;
+        p->n321 = 0;
         p->q = (1ull << p->n2) / m;
         p->r = 0;
         return;
@@ -672,48 +687,54 @@ static void barrett_precompute(struct barrett_t *p, uint64_t m)
     if (p->n < 42)
     {
         // modified Barrett
+        p->n2 = p->n << 1;
         p->n32 = p->n + (p->n >> 1);
-        uint128_divrem(&p->q, &p->r, (uint128_t)1 << p->n32, m);
+        p->n321 = p->n32 + 1;
+        p->r = ((uint128_t)1 << p->n32) % m;
+        p->q = ((uint128_t)1 << p->n321) / m;
         return;
     }
 
     // no optimization
     p->n2 = 0;
     p->n32 = 0;
+    p->n321 = 0;
     p->q = 0;
     p->r = 0;
 }
 
 static uint64_t barrett_mul_mod(uint64_t u, uint64_t v, const struct barrett_t &bt)
 {
-    if (bt.n <= 31)
+    if (bt.n < 30)
     {
-        // for modulus m up to 31 bits (3 multiplications)
+        // for modulus m up to 30 bits (3 multiplications)
         // assume u, v <= 2 * m
-        // makes r <= m
+        // makes r <= 2 * m
         uint64_t r = u * v;
         uint64_t e = ((uint128_t)r * bt.q) >> bt.n2;
-        r -= e * bt.m;
-        r -= (r >= bt.m) ? bt.m : 0;
-        return r; //    r <= m
+        r -= e * bt.m; // barrett subtraction without underflow
+        return r;
     }
 
     if (bt.n < 42)
     {
         // for modulus up to 42 bits  (4 multiplications)
-        // assume u, v < 2^64
-        // makes r < 2^64
-        uint128_t t = (uint128_t)u * v;
+        // assume u, v <= 2 * m
+        // makes r <= 2 * m
+        uint128_t t = (uint128_t)u * v;                // up to 86 bits
         uint64_t t_lo = t & ((1ull << bt.n32) - 1);    // up to 63 bits
-        uint64_t t_hi = t >> bt.n32;                   // up to 21 bits
+        uint64_t t_hi = t >> bt.n32;                   // up to 23 bits
         uint64_t b = t_lo + t_hi * bt.r;               // up to 64 bits
-        uint128_t e = ((uint128_t)b * bt.q) >> bt.n32; // up to 85 bits , down to 22 bits
-        uint64_t s = (uint64_t)t - bt.m * (uint64_t)e; // barrett subtraction without underfllow
-        return s;                                      // s < 3 * modulus
+        uint64_t e = ((uint128_t)bt.q * b) >> bt.n321; // up to 85 bits and down to 22 bits
+        uint64_t r = b - e * bt.m;                     // barrett subtraction without underflow r < 3*m
+        return r - ((r >= bt.m) ? bt.m : 0);           // r <= 2 * m
     }
 
-    // no optimisation (2 instructions, including a long division)
-    return mul_mod(u, v, bt.m);
+    // fall-back
+    // no optimisation (2 asm instructions, including a slow long division)
+    // assume u, v <= 2 * m
+    // makes r <= 2 * m
+    return mul_mod(u, v, bt.m); // assume u*v < (2^64-1)*m , i.e. worst case m < 63 bits
 }
 
 // modular exponentiation a^e mod m with precomputations
@@ -758,12 +779,16 @@ static bool witness(uint64_t n, uint64_t s, uint64_t d, uint64_t a)
     {
         y = square_mod(x, n);
         if (y == 1 && x != 1 && x != n - 1)
+        {
             return false;
+        }
         x = y;
         --s;
     }
     if (y != 1)
+    {
         return false;
+    }
     return true;
 }
 
@@ -1153,8 +1178,87 @@ static bool is_perfect_power(uint64_t n)
     return false;
 }
 
+// https://en.wikipedia.org/wiki/Shanks%27s_square_forms_factorization
+static uint64_t uint64_sqfof_factor(uint64_t n)
+{
+    static uint64_t ks[] = {1,     3,      5,      7,         11,         3 * 5,      3 * 7,      3 * 11,
+                            5 * 7, 5 * 11, 7 * 11, 3 * 5 * 7, 3 * 5 * 11, 3 * 7 * 11, 5 * 7 * 11, 3 * 5 * 7 * 11,
+                            0};
+    static uint64_t max_n[] = {18446744073709551615ul,
+                               6148914691236517205ul,
+                               3689348814741910323ul,
+                               2635249153387078802ul,
+                               1676976733973595601ul,
+                               1229782938247303441ul,
+                               878416384462359600ul,
+                               558992244657865200ul,
+                               527049830677415760ul,
+                               335395346794719120ul,
+                               239568104853370800ul,
+                               175683276892471920ul,
+                               111798448931573040ul,
+                               79856034951123600ul,
+                               47913620970674160ul,
+                               15971206990224720ul,
+                               0ul};
+    uint64_t Pi, P0, P1, Q0, Q1, Q2, b, q, b0, B, i, k, s, iks, g;
+    if (n % 2 == 0)
+        return 2;
+    s = uint64_isqrt(n);
+    if (s * s == n)
+        return s; // perfect square, factor is found
+
+    B = 3 * 2 * uint64_isqrt(2 * s);
+    iks = 0;
+    while (n < max_n[iks])
+    {
+        k = ks[iks++];
+        Pi = uint64_isqrt(k * n);
+        P0 = Pi;
+        Q0 = 1;
+        Q1 = k * n - P0 * P0;
+        for (i = 2; i < B; i++)
+        {
+            b = (Pi + P0) / Q1;
+            P1 = b * Q1 - P0;
+            Q2 = Q0 + b * (P0 - P1);
+            if (i % 2 == 0 && is_perfect_square(Q2))
+                break;
+            P0 = P1;
+            Q0 = Q1;
+            Q1 = Q2;
+        }
+        if (i == B)
+            continue;
+
+        q = uint64_isqrt(Q2);
+        b0 = (Pi - P1) / q;
+        P0 = b0 * q + P1;
+        Q0 = q;
+        Q1 = (k * n - P0 * P0) / Q0;
+        while (1)
+        {
+            b = (Pi + P0) / Q1;
+            P1 = b * Q1 - P0;
+            if (P0 == P1)
+                break;
+            Q2 = Q0 + b * (P0 - P1);
+            P0 = P1;
+            Q0 = Q1;
+            Q1 = Q2;
+        }
+
+        g = uint64_gcd(n, P1);
+        if (g > 1 && g < n)
+        {
+            return g; // a factor is found
+        }
+    }
+    return 1; // n is prime, or cannot be factored
+}
+
 // pollard-rho factorization with brent variant
-static uint64_t brent_pollard_factor(uint64_t n)
+static uint64_t uint64_brent_pollard_factor(uint64_t n)
 {
     uint64_t i, x, ys, k;
     uint64_t m = 1000;
@@ -1232,8 +1336,26 @@ struct factor_find_t
 typedef vector<factor_t> factor_v;
 typedef vector<factor_t>::reverse_iterator reverse_iterator_v;
 
+static void uint64_add_prime_factor(factor_v &primes, uint64_t p)
+{
+    // avoid storing duplicate prime factors
+    reverse_iterator_v v = find_if(primes.rbegin(), primes.rend(), factor_find_t(p));
+    if (v == primes.rend())
+    {
+        // not found, add the factor
+        factor_t f;
+        f.prime = p;
+        f.count = 1;
+        primes.push_back(f);
+    }
+    else
+    {
+        v->count += 1;
+    }
+}
+
 // search for large factors, assume sieving already done up to factor 151
-// input n can be prime or composite
+// input n can be prime or composite , but has no factor less than 157
 static void uint64_large_factors(factor_v &primes, uint64_t n)
 {
     unsigned i;
@@ -1251,26 +1373,21 @@ static void uint64_large_factors(factor_v &primes, uint64_t n)
 
         if (m < 157 * 157 || uint64_is_prime(m))
         {
-            // avoid storing duplicate prime factors
-            reverse_iterator_v v = find_if(primes.rbegin(), primes.rend(), factor_find_t(m));
-            if (v == primes.rend())
-            {
-                // not found, add the factor
-                factor_t f;
-                f.prime = m;
-                f.count = 1;
-                primes.push_back(f);
-            }
-            else
-            {
-                v->count += 1;
-            }
+            uint64_add_prime_factor(primes, m);
         }
         else
         {
+            uint64_t factor;
             // m is not prime,
-            // get more prime and composite factors from pollard-rho method
-            uint64_t factor = brent_pollard_factor(m);
+            // get more prime and composite factors from sqfof method O(n^1/4) (might fail and return 1)
+            factor = uint64_sqfof_factor(m);
+            if (factor == 1)
+            {
+                // get more prime and composite factors from pollard-rho method O(smallest factor^1/2)   <= O(n^1/4)
+                // which returns only when a factor is found. Unfortunately, random parameters makes it hasardeous, i
+                // and it could take a long, long time to run to completion.
+                factor = uint64_brent_pollard_factor(m);
+            }
             factors.push_back(m / factor);
             factors.push_back(factor);
         }
@@ -1301,45 +1418,20 @@ static uint64_t uint64_smallest_factor(uint64_t m)
 
 static void uint64_all_factors(factor_v &factors, uint64_t m)
 {
+    // ---------------------------------------------------------------
     // first search all prime factors < 157
+    // ---------------------------------------------------------------
     uint64_t factor = uint64_small_factor(m);
     while (factor != 1)
     {
-        // avoid storing duplicate factors
-        reverse_iterator_v v = find_if(factors.rbegin(), factors.rend(), factor_find_t(factor));
-        if (v == factors.rend())
-        {
-            // not found, add the factor
-            factor_t f;
-            f.prime = factor;
-            f.count = 1;
-            factors.push_back(f);
-        }
-        else
-        {
-            v->count++;
-        }
+        uint64_add_prime_factor(factors, factor);
         m /= factor;
         factor = uint64_small_factor(m);
     }
     if (m < 157 * 157)
     {
-        // all factors < 157 have been removed
-        // m is prime
-        // avoid storing duplicate factors
-        reverse_iterator_v v = find_if(factors.rbegin(), factors.rend(), factor_find_t(m));
-        if (v == factors.rend())
-        {
-            // not found, add the factor
-            factor_t f;
-            f.prime = m;
-            f.count = 1;
-            factors.push_back(f);
-        }
-        else
-        {
-            v->count++;
-        }
+        // all factors < 157 have been removed and m is prime
+        uint64_add_prime_factor(factors, m);
     }
     else
     {
@@ -1347,7 +1439,7 @@ static void uint64_all_factors(factor_v &factors, uint64_t m)
         uint64_large_factors(factors, m);
     }
 
-    // order the factors from the vector
+    // order the factors from the vector (more or less already ordered)
     sort(factors.begin(), factors.end(), factor_sort);
 }
 
@@ -1366,16 +1458,33 @@ static bool is_perfect_power(const factor_v &factors)
     return factors[0].count != 1;
 }
 
+static bool inline is_squarefree(const factor_v &factors)
+{
+    for (uint64_t i = 0; i < factors.size(); i++)
+    {
+        if (factors[i].count > 1)
+            return false;
+    }
+    // no square detected in factors
+    return true;
+}
+
 static bool inline is_semiprime(const factor_v &factors)
 {
-    // a semiprime (exactly 2 different factors)
+    // a semiprime (exactly 2 different proper factors)
     return factors.size() == 2 && factors[0].count == 1 && factors[1].count == 1;
 }
 
-static bool inline is_tripleprime(const factor_v &factors)
+static bool inline is_sphenic(const factor_v &factors)
 {
-    // a semiprime (exactly 3 different factors)
+    // a sphenic (exactly 3 different proper factors)
     return factors.size() == 3 && factors[0].count == 1 && factors[1].count == 1 && factors[2].count == 1;
+}
+
+static bool inline is_prime(const factor_v &factors)
+{
+    // 1 unique factor
+    return factors.size() == 1 && factors[0].count == 1;
 }
 
 // conversion of a large number into a basis-10 string.

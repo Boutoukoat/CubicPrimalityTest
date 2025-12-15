@@ -45,6 +45,26 @@ static int self_test_64(void)
     if (r > 2 * s)
         return -1;
 
+    r = barrett_mul_mod(2 * s - 1, 2 * s - 1, u);
+    if (r % s != 1)
+        return -1;
+    if (r > 2 * s)
+        return -1;
+
+    s = 0x7654321fedull;
+    barrett_precompute(&u, s);
+    r = barrett_mul_mod(2 * s - 1, 1, u);
+    if (r % s != s - 1)
+        return -1;
+    if (r > 2 * s)
+        return -1;
+
+    r = barrett_mul_mod(2 * s - 1, 2 * s - 1, u);
+    if (r % s != 1)
+        return -1;
+    if (r > 2 * s)
+        return -1;
+
     printf("Perfect square ...\n");
     b = is_perfect_square(6);
     if (b)
@@ -104,6 +124,31 @@ static int self_test_64(void)
     b = is_perfect_sursolid(0x100500A00A005002ull);
     if (b)
         return -1;
+
+    printf("Sphenic numbers\n");
+    unsigned sphenic[] = {30,  42,  66,  70,  78,  102, 105, 110, 114, 130, 138, 154, 165, 170, 174, 182, 186, 190,
+                          195, 222, 230, 231, 238, 246, 255, 258, 266, 273, 282, 285, 286, 290, 310, 318, 322, 345,
+                          354, 357, 366, 370, 374, 385, 399, 402, 406, 410, 418, 426, 429, 430, 434, 435, 438, 0};
+    unsigned psj = 3;
+    for (unsigned psi = 0; sphenic[psi]; psi++)
+    {
+        factor_v f;
+        while (psj < sphenic[psi])
+        {
+            f.clear();
+            uint64_all_factors(f, psj);
+            b = is_sphenic(f);
+            if (b)
+                return -1;
+            psj++;
+        }
+        f.clear();
+        uint64_all_factors(f, psj);
+        b = is_sphenic(f);
+        if (!b)
+            return -1;
+        psj++;
+    }
 
     printf("Perfect power ...\n");
     unsigned perfect_powers[] = {1,   4,   8,   9,   16,  25,  27,  32,  36,  49,  64,   81,   100,  121, 125,
@@ -446,6 +491,76 @@ static int self_test_64(void)
     if (!b)
     {
         printf("isprime M(61) failed\n");
+        return -1;
+    }
+
+    printf("Integer square root\n");
+    s = 0x12;
+    t = uint64_isqrt(s * s);
+    if (t != s)
+    {
+	    return -1;
+    }
+
+    t = uint64_isqrt(s * s + 1);
+    if (t != s)
+    {
+	    return -1;
+    }
+
+    s = 0x4321;
+    t = uint64_isqrt(s * s);
+    if (t != s)
+    {
+	    return -1;
+    }
+
+    t = uint64_isqrt(s * s + 1);
+    if (t != s)
+    {
+	    return -1;
+    }
+
+    s = 0x7654321;
+    t = uint64_isqrt(s * s);
+    if (t != s)
+    {
+	    return -1;
+    }
+
+    t = uint64_isqrt(s * s + 1);
+    if (t != s)
+    {
+	    return -1;
+    }
+
+    printf("Factors ...\n");
+
+    t = uint64_sqfof_factor(101 * 103);
+    if (!(t == 101 || t == 103))
+    {
+        printf("sqfof failed\n");
+        return -1;
+    }
+
+    t = uint64_sqfof_factor(157 * 157);
+    if (!(t == 157))
+    {
+        printf("sqfof failed\n");
+        return -1;
+    }
+
+    t = uint64_brent_pollard_factor(101 * 103);
+    if (!(t == 101 || t == 103))
+    {
+        printf("pollard failed\n");
+        return -1;
+    }
+
+    t = uint64_brent_pollard_factor(157 * 157);
+    if (!(t == 157))
+    {
+        printf("pollard failed\n");
         return -1;
     }
 
