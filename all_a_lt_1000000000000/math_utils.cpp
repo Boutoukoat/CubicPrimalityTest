@@ -1513,6 +1513,12 @@ static bool inline is_squarefree(const factor_v &factors)
     return true;
 }
 
+static bool inline is_perfect_prime_power(const factor_v &factors)
+{
+    // a perfect power with 1 prime unique factor
+    return factors.size() == 1 && factors[0].count > 1;
+}
+
 static bool inline is_semiprime(const factor_v &factors)
 {
     // a semiprime (exactly 2 different proper factors)

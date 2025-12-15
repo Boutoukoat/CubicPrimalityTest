@@ -1,3 +1,10 @@
+// ---------------------------------------------------------------------------------
+//
+// Validation code, verify NO composite number will be detected as prime
+// by the cubic primality test
+//
+// ---------------------------------------------------------------------------------
+
 // verify details of the cubic test
 //
 // {gettime();forstep(n=25,1000000000000,2,
@@ -279,6 +286,10 @@ static uint64_t skip_semiprime_count = 0;
 static uint64_t worked_semiprime_count = 0;
 static uint64_t skip_composite_count = 0;
 static uint64_t worked_composite_count = 0;
+static uint64_t skip_prime_power_count = 0;
+static uint64_t worked_prime_power_count = 0;
+static uint64_t skip_multiple3_count = 0;
+static uint64_t worked_multiple3_count = 0;
 
 // -----------------------------------------------------------------
 //
@@ -299,7 +310,7 @@ void verify_all_a(uint64_t n, uint64_t R_fermat, uint64_t R_cubic)
         a -= (a >= n) ? n : 0;
 
         // verify test Mod(a,n)^R_fermat == 1
-        modexp_count += 1;
+        modexp_count += (R_fermat != 0);
         if (barrett_pow_mod(a, R_fermat, bn) == 1)
         {
             exponentiate_count += 1;
@@ -377,8 +388,8 @@ void verify_all_a(uint64_t n, uint64_t R_fermat, uint64_t R_cubic)
 //
 // -----------------------------------------------------------------
 
-#define MT_THREAD_COUNT 4 // a power of 2
-#define MT_QUEUE_SIZE (2 * MT_THREAD_COUNT)
+#define MT_MAX_THREAD_COUNT 256 // a power of 2
+#define MT_QUEUE_SIZE (2 * MT_MAX_THREAD_COUNT)
 
 struct ring_entry_t
 {
@@ -399,6 +410,7 @@ struct mod_multithread_t
 
     uint64_t display;
     time_t d0;
+    unsigned worker_count;
 };
 
 static void mod_multithread_notify_ready(mod_multithread_t *mt, const struct ring_entry_t &job)
@@ -453,7 +465,7 @@ static struct ring_entry_t mod_multithread_get_result(mod_multithread_t *mt)
 }
 
 static struct mod_multithread_t mt;
-static pthread_t mt_tids[MT_THREAD_COUNT];
+static pthread_t mt_tids[MT_MAX_THREAD_COUNT];
 
 void *mt_worker(void *)
 {
@@ -507,7 +519,7 @@ void mt_initialize(void)
     mt.d0 = time(NULL);
 
     // kick-off the worker threads
-    for (unsigned i = 0; i < MT_THREAD_COUNT; i++)
+    for (unsigned i = 0; i < mt.worker_count; i++)
     {
         pthread_create(&mt_tids[i], 0, mt_worker, &mt);
     }
@@ -515,7 +527,7 @@ void mt_initialize(void)
 
 void mt_debug_display(void)
 {
-    printf("MT jobs requested ............ : %20ld\n", mt.start_queue_head);
+    printf("MT jobs requested ............ : %20ld\n", mt.start_queue_head - mt.worker_count);
     printf("MT jobs completed ............ : %20ld\n", mt.done_queue_head);
     printf("\n");
 }
@@ -524,7 +536,7 @@ void mt_terminate(void)
 {
     struct ring_entry_t job;
     // gracefully stop the worker loops
-    for (unsigned i = 0; i < MT_THREAD_COUNT; i++)
+    for (unsigned i = 0; i < mt.worker_count; i++)
     {
         job.n = 0;
         job.R_fermat = 0;
@@ -533,7 +545,7 @@ void mt_terminate(void)
     }
 
     // wait for the worker thread terminations
-    for (unsigned i = 0; i < MT_THREAD_COUNT; i++)
+    for (unsigned i = 0; i < mt.worker_count; i++)
     {
         pthread_join(mt_tids[i], 0);
     }
@@ -547,22 +559,24 @@ void mt_terminate(void)
 
 void mt_verify_all_a(uint64_t n, uint64_t R_fermat, uint64_t R_cubic)
 {
-#if 1
-    // best effort, check there is possibly something in the response queue
-    drain_done_queue(&mt);
+    if (mt.worker_count > 0)
+    {
+        // best effort, check there is possibly something in the response queue
+        drain_done_queue(&mt);
 
-    // enqueue a new request
-    struct ring_entry_t job;
+        // enqueue a new request
+        struct ring_entry_t job;
 
-    job.n = n;
-    job.R_fermat = R_fermat;
-    job.R_cubic = R_cubic;
-    mod_multithread_notify_ready(&mt, job);
-#else
-    // debug : ino work for worker threads, run in the thread context
-    verify_all_a(n, R_fermat, R_cubic);
-
-#endif
+        job.n = n;
+        job.R_fermat = R_fermat;
+        job.R_cubic = R_cubic;
+        mod_multithread_notify_ready(&mt, job);
+    }
+    else
+    {
+        // for debug purposes : no work for worker threads, run in the thread context
+        verify_all_a(n, R_fermat, R_cubic);
+    }
 }
 
 // -----------------------------------------------------------------
@@ -578,6 +592,7 @@ int main(int argc, char **argv)
     char temp_filename2[100] = "cubic_all_a.bak\0";
     bool use_temp_files = true;
     uint64_t interval_seconds = 600; // 10 minutes
+    mt.worker_count = 0;             // single thread by default
 
     for (int i = 1; i < argc; i++)
     {
@@ -614,10 +629,21 @@ int main(int argc, char **argv)
             printf("Temp file names are %s %s\n", temp_filename1, temp_filename2);
             continue;
         }
-        printf("-n ddd : starting number, default is %ld\n", n_start);
+        if (!strcmp(argv[i], "-wt"))
+        {
+            mt.worker_count = strtoull(argv[++i], 0, 0);
+            if (mt.worker_count > MT_MAX_THREAD_COUNT)
+            {
+                printf("too many workers : Increase MT_MAX_THREAD_COUNT to the next power of 2\n");
+                assert(mt.worker_count <= MT_MAX_THREAD_COUNT);
+            }
+            continue;
+        }
+        printf("-n ddd   : starting number, default is %ld\n", n_start);
         printf("-max ddd : maximum value for n = p*Q, default is %ld\n", n_max);
-        printf("-s ddd : interval in seconds between restart file updates, default is %ld\n", interval_seconds);
-        printf("-f aaa : alternative filename to restart at some (p,Q,n_max)\n");
+        printf("-s ddd   : interval in seconds between restart file updates, default is %ld\n", interval_seconds);
+        printf("-f aaa   : alternative filename to restart at some (p,Q,n_max)\n");
+        printf("-wt ddd  : number of worker threads at runtime (from 0 to %d)\n", MT_MAX_THREAD_COUNT);
         printf("\n");
         printf("-t aaa : temp filename prefix %s %s\n", temp_filename1, temp_filename2);
         printf("\n");
@@ -645,7 +671,7 @@ int main(int argc, char **argv)
 
     // round n to next composite, not multiple of 3, not multiple of 2
     n_start = (n_start < 25) ? 25 : (n_start | 1);
-    while (n_start % 3 == 0 || uint64_is_prime(n_start))
+    while (uint64_is_prime(n_start))
     {
         n_start += 2;
     }
@@ -665,6 +691,10 @@ int main(int argc, char **argv)
     skip_composite_count = 0;
     worked_semiprime_count = 0;
     skip_semiprime_count = 0;
+    skip_prime_power_count = 0;
+    worked_prime_power_count = 0;
+    skip_multiple3_count = 0;
+    worked_multiple3_count = 0;
 
     mt_initialize();
 
@@ -694,13 +724,68 @@ int main(int argc, char **argv)
         if (is_prime(f))
         {
             // ------------------------------------------------------------------------------
-            // prime, we are not interested with.
+            // prime, we are not interested with that
             // ------------------------------------------------------------------------------
+        }
+        else if (is_perfect_prime_power(f))
+        {
+            // ------------------------------------------------------------------------------
+            // 1 factors with multiplicity n
+            //
+            // but cubes are not processed here
+            // ------------------------------------------------------------------------------
+            if (f[0].count % 3 != 0)
+            {
+                worked_prime_power_count += 1;
+                mt_verify_all_a(n, 0, n - 1);
+            }
+            else
+            {
+                skip_prime_power_count += 1;
+            }
+        }
+        else if (f[0].prime == 3)
+        {
+            // ------------------------------------------------------------------------------
+            // multiple of 3
+            //
+            // skip the factor 3
+            // ------------------------------------------------------------------------------
+            uint64_t Rmin = n - 1;
+            uint64_t i;
+            for (i = 1; i < f.size(); i++)
+            {
+                uint64_t p = f[i].prime;
+                uint64_t Q = n / p;
+                uint128_t p3 = (uint128_t)p * p * p;
+                uint128_t Q3 = (uint128_t)Q * Q * Q;
+                uint128_t g = uint128_gcd(p3 - 1, Q3 - 1);
+                uint64_t R = g > (n - 1) ? (n - 1) : (n - 1) % g;
+                if (R < 3 || (p != 5 && R == 4) || (p < V_COUNT && R < V[p]) || (R < p - 1 && p % 10 != 1))
+                {
+                    // early terminate this number
+                    break;
+                }
+                if (R < Rmin)
+                {
+                    Rmin = R;
+                }
+            }
+            if (i == f.size())
+            {
+                // no early termination
+                worked_multiple3_count += 1;
+                mt_verify_all_a(n, 0, Rmin);
+            }
+            else
+            {
+                skip_multiple3_count += 1;
+            }
         }
         else if (is_semiprime(f))
         {
             // ------------------------------------------------------------------------------
-            // 2 factors have multiplicity 1   p < q
+            // 2 factors have multiplicity 1   3 < p < q
             //
             // input number is squarefree, but processing is greatly simplified when there are
             // only 2 factors
@@ -794,7 +879,7 @@ int main(int argc, char **argv)
             else
             {
                 worked_composite_count += 1;
-                mt_verify_all_a(n, n - 1, Rmin); // TODO : is it 0 or n-1 ???
+                mt_verify_all_a(n, 0, Rmin);
             }
         }
 
@@ -813,9 +898,8 @@ int main(int argc, char **argv)
             }
         }
 
-        // next n, not a multiple of 3, not a multiple of 2
-        n += dn;
-        dn = 6 - dn;
+        // next n, not a multiple of 2
+        n += 2;
     }
 
     mt_terminate();
@@ -834,14 +918,20 @@ int main(int argc, char **argv)
     //       done
 
     // debug : verifies visually the number of "modexps" and "cubic exponentiates" and other values
-    printf("modexp count ................. : %20ld\n", modexp_count);
-    printf("cubic exponentiate count ..... : %20ld\n", exponentiate_count);
+    printf("\n");
+    printf("worked prime power count ..... : %20ld\n", worked_prime_power_count);
+    printf("skip prime power count ....... : %20ld\n", skip_prime_power_count);
+    printf("worked multiple of 3 count ... : %20ld\n", worked_multiple3_count);
+    printf("skip multiple of 3 count ..... : %20ld\n", skip_multiple3_count);
     printf("worked semiprime count ....... : %20ld\n", worked_semiprime_count);
     printf("skip semiprime count ......... : %20ld\n", skip_semiprime_count);
     printf("worked squarefree count ...... : %20ld\n", worked_squarefree_count);
     printf("skip squarefree count ........ : %20ld\n", skip_squarefree_count);
     printf("worked composite count ....... : %20ld\n", worked_composite_count);
     printf("skip composite count ......... : %20ld\n", skip_composite_count);
+    printf("\n");
+    printf("modexp count ................. : %20ld\n", modexp_count);
+    printf("cubic exponentiate count ..... : %20ld\n", exponentiate_count);
     printf("\n");
 
     // debug : verifies visually the number of multithread jobs done
