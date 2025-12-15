@@ -783,8 +783,7 @@ static uint64_t barrett_long_mod(uint128_t u, const struct barrett_t &bt)
 // intermediate numbers are less than (3 * m)
 static uint64_t barrett_pow_mod(uint64_t a, uint64_t e, const barrett_t &bt)
 {
-    if (e == 0)
-        return (a == 0) ? 0 : 1;
+    if (e == 0) return 1;
     uint64_t bits = uint64_log_2(e);
     uint64_t result = a;
     while (bits--)
