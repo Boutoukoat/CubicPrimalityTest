@@ -394,11 +394,11 @@ void verify_all_a(uint64_t n, uint64_t R_fermat, uint64_t R_cubic, uint64_t &mod
 
 struct ring_entry_t
 {
-    uint64_t __attribute__((aligned(64))) n;
-    uint64_t R_fermat;
-    uint64_t R_cubic;
-    uint64_t modexp;
-    uint64_t exponentiate;
+    uint64_t __attribute__((aligned(64))) n;   // composite number n
+    uint64_t R_fermat;    // fermat exponent (can be 0 == skip fermat test)
+    uint64_t R_cubic;     // cubic exponentiation exponent
+    uint64_t modexp;      // count of modexp for that n
+    uint64_t exponentiate; // count of exponentiate for that n
 };
 
 struct mod_multithread_t
@@ -411,69 +411,71 @@ struct mod_multithread_t
     struct ring_entry_t start_queue[MT_QUEUE_SIZE];
     struct ring_entry_t done_queue[MT_QUEUE_SIZE];
 
-    uint64_t last_completed;
-    uint64_t display;
-    time_t d0;
-    unsigned worker_count;
+    uint64_t last_completed;    // last n completed by all threads
+    uint64_t display;           // incremented counter for display
+    time_t d0;                  // last display time
+    unsigned worker_count;      // number of worker threads (-wt on command line)
 };
 
 static void mod_multithread_notify_ready(mod_multithread_t *mt, struct ring_entry_t *job)
 {
+	// master : push a job to the start queue
     sem_wait(&mt->start_sem);
     pthread_mutex_lock(&mt->start_mutex);
-    // printf("Notify Ready %ld\n", job.n);
+    // printf("Notify Ready %ld\n", job->n);
     mt->start_queue[mt->start_queue_head++ & (MT_QUEUE_SIZE - 1)] = *job;
-    asm("":::"memory");
-    // _mm_mfence();
+    asm("":::"memory");    // prevent the compiler to optimize and move memory accesses across this line
     pthread_mutex_unlock(&mt->start_mutex);
     pthread_cond_signal(&mt->start_cond);
 }
 
 static void mod_multithread_notify_done(mod_multithread_t *mt, struct ring_entry_t *job)
 {
+	// workers : push a job done to the response queue
     sem_wait(&mt->done_sem);
     pthread_mutex_lock(&mt->done_mutex);
-    // printf("Job done %ld\n", job.n);
+    // printf("Job done %ld\n", job->n);
     mt->done_queue[mt->done_queue_head++ & (MT_QUEUE_SIZE - 1)] = *job;
-    asm("":::"memory");
-    // _mm_mfence();
+    asm("":::"memory");    // prevent the compiler to optimize and move memory accesses across this line
     pthread_mutex_unlock(&mt->done_mutex);
     pthread_cond_signal(&mt->done_cond);
 }
 
 static void mod_multithread_get_job(mod_multithread_t *mt, struct ring_entry_t *job)
 {
+	// workers : get a new job from the start queue
     pthread_mutex_lock(&mt->start_mutex);
     while (mt->start_queue_tail == mt->start_queue_head)
     {
         pthread_cond_wait(&mt->start_cond, &mt->start_mutex);
     }
     *job = mt->start_queue[mt->start_queue_tail++ & (MT_QUEUE_SIZE - 1)];
-    // printf("Get job %ld\n", job.n);
-    asm("":::"memory");
-    // _mm_mfence();
+    asm("":::"memory");    // prevent the compiler to optimize and move memory accesses across this line
+    // printf("Get job %ld\n", job->n);
     pthread_mutex_unlock(&mt->start_mutex);
     sem_post(&mt->start_sem);
 }
 
 static void mod_multithread_get_result(mod_multithread_t *mt, struct ring_entry_t *job)
 {
+	// master : get a job done from the response queue
     pthread_mutex_lock(&mt->done_mutex);
     while (mt->done_queue_tail == mt->done_queue_head)
     {
         pthread_cond_wait(&mt->done_cond, &mt->done_mutex);
     }
     *job = mt->done_queue[mt->done_queue_tail++ & (MT_QUEUE_SIZE - 1)];
-    asm("":::"memory");
-    // _mm_mfence();
-    // printf("Get result %ld\n", job.n);
+    asm("":::"memory");    // prevent the compiler to optimize and move memory accesses across this line
+    // printf("Get result %ld\n", job->n);
     pthread_mutex_unlock(&mt->done_mutex);
     sem_post(&mt->done_sem);
 }
 
+// multithread global data
 static struct mod_multithread_t mt;
 static pthread_t mt_tids[MT_MAX_THREAD_COUNT];
 
+// worker thread
 void *mt_worker(void *)
 {
     struct ring_entry_t job;
@@ -484,8 +486,10 @@ void *mt_worker(void *)
         mod_multithread_get_job(&mt, &job);
         if (job.n == 0)
             break;
+
 	// run the job
         verify_all_a(job.n, job.R_fermat, job.R_cubic, job.modexp, job.exponentiate);
+
         // job is done, tell the main thread
         mod_multithread_notify_done(&mt, &job);
     }
@@ -497,12 +501,18 @@ void drain_done_queue(mod_multithread_t *mt)
     // best effort, non blocking attempt to drain whatever is in the queue
     while (mt->done_queue_tail != mt->done_queue_head)
     {
+	    // get an entry
         struct ring_entry_t job;
        	mod_multithread_get_result(mt, &job);
+	// accumulate global counters
 	modexp_count += job.modexp;
 	exponentiate_count += job.exponentiate;
+	if (job.n > mt->last_completed)
+	{
+		mt->last_completed = job.n;
+	}
 
-        // multiple thread progress is approximative and out of order
+        // multiple thread progress is approximative, and out of order
         if (++mt->display > 1000)
         {
             time_t d1 = time(NULL);
@@ -510,11 +520,11 @@ void drain_done_queue(mod_multithread_t *mt)
 	    fflush(stdout);
             mt->display = 0;
             mt->d0 = d1;
-	    mt->last_completed = job.n;
         }
     }
 }
 
+// multithread structure initialization
 void mt_initialize(void)
 {
     mt.start_cond = PTHREAD_COND_INITIALIZER;
@@ -544,14 +554,14 @@ void mt_debug_display(void)
     printf("jobs completed ............... : %20ld\n", mt.done_queue_head);
     printf("Left in request queue ........ : %20ld\n", mt.start_queue_head - mt.start_queue_tail);
     printf("left in response queue ....... : %20ld\n", mt.done_queue_head - mt.done_queue_tail);
-    printf("\n");
 }
 
+// multithread structure clean termination 
 void mt_terminate(void)
 {
     struct ring_entry_t job;
 
-    // wait for workload completion
+    // approximate wait for workload completion
     while(mt.start_queue_head - mt.done_queue_head != 0)
     {
             drain_done_queue(&mt);
@@ -584,6 +594,9 @@ void mt_terminate(void)
     sem_destroy(&mt.done_sem);
 }
 
+// master thread : once a number n is selected
+// either push it to a queue for a worker to complete the tests
+// either do the test (-wt 0 on command line)
 void mt_verify_all_a(uint64_t n, uint64_t R_fermat, uint64_t R_cubic)
 {
     if (mt.worker_count > 0)
@@ -725,6 +738,7 @@ int main(int argc, char **argv)
     worked_multiple3_count = 0;
 
     mt_initialize();
+    mt.last_completed = n_start - 2;
     time_t t_start = time(NULL);
 
     // temporary vector of factors
@@ -919,7 +933,7 @@ int main(int argc, char **argv)
         time_t t1 = time(NULL);
         if (t1 - t0 >= interval_seconds)
         {
-            if (!write_file(temp_filename1, temp_filename2, n, n_max, interval_seconds))
+            if (!write_file(temp_filename1, temp_filename2, mt.last_completed, n_max, interval_seconds))
             {
                 printf("Unable to write the file for restart after crash (%s)\n", temp_filename1);
             }
@@ -937,6 +951,8 @@ int main(int argc, char **argv)
     fflush(stdout);
 
     mt_terminate();
+    printf("Last completed n = %ld\n", mt.last_completed);
+    fflush(stdout);
 
     // update the restart file after the last iterations
     if (!write_file(temp_filename1, temp_filename2, n, n_max, interval_seconds))
@@ -972,7 +988,8 @@ int main(int argc, char **argv)
     mt_debug_display();
 
     printf("\n");
-    printf("overall time ................. : %20ld s.\n", time(NULL) - t_start);
+    printf("worker threads ............... : %20d\n", mt.worker_count);
+    printf("overall time ................. : %20ld seconds\n", time(NULL) - t_start);
     fflush(stdout);
     printf("\n");
 
