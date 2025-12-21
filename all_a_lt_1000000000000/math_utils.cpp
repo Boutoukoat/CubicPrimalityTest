@@ -439,6 +439,7 @@ static int int64_kronecker(int64_t x, int64_t y)
 }
 
 // integer square root (rounded down)
+// assume x < 2^63
 static uint64_t uint64_isqrt(uint64_t x)
 {
     // Avoid divide by zero

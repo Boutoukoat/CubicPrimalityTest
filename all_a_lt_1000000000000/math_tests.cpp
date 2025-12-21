@@ -1,6 +1,11 @@
 
 #include "math_utils.cpp"
 
+#include "math_barrett_tests.cpp"
+#include "math_isqrt_tests.cpp"
+#include "math_jacobi_tests.cpp"
+#include "math_powers_tests.cpp"
+
 static int self_test_64(void)
 {
     uint64_t s, r, t;
@@ -35,149 +40,11 @@ static int self_test_64(void)
     r = shift_mod(s, 33, t);
     assert(r == 3145728);
 
-    printf("Barrett reduction speed-up\n");
-    barrett_t u;
-    s = 101;
-    barrett_precompute(&u, s);
-    r = barrett_mul_mod(99, 38, u);
-    if (r % s != 25)
-        return -1;
-    if (r > 2 * s)
-        return -1;
-
-    r = barrett_mul_mod(2 * s - 1, 2 * s - 1, u);
-    if (r % s != 1)
-        return -1;
-    if (r > 2 * s)
-        return -1;
-
-    s = 0x7654321fedull;
-    barrett_precompute(&u, s);
-    r = barrett_mul_mod(2 * s - 1, 1, u);
-    if (r % s != s - 1)
-        return -1;
-    if (r > 2 * s)
-        return -1;
-
-    r = barrett_mul_mod(2 * s - 1, 2 * s - 1, u);
-    if (r % s != 1)
-        return -1;
-    if (r > 2 * s)
-        return -1;
-
-    printf("Perfect square ...\n");
-    b = is_perfect_square(6);
-    if (b)
-        return -1;
-    b = is_perfect_square(64);
-    if (!b)
-        return -1;
-    b = is_perfect_square(27);
-    if (b)
-        return -1;
-    b = is_perfect_square(0x1002001);
-    if (!b)
-        return -1;
-    b = is_perfect_square(0x1002000);
-    if (b)
-        return -1;
-    b = is_perfect_square(0x1002002);
-    if (b)
-        return -1;
-
-    printf("Perfect cube ...\n");
-    b = is_perfect_cube(6);
-    if (b)
-        return -1;
-    b = is_perfect_cube(64);
-    if (!b)
-        return -1;
-    b = is_perfect_cube(81);
-    if (b)
-        return -1;
-    b = is_perfect_cube(0x1003003001);
-    if (!b)
-        return -1;
-    b = is_perfect_cube(0x1003003000);
-    if (b)
-        return -1;
-    b = is_perfect_cube(0x1003003002);
-    if (b)
-        return -1;
-
-    printf("Perfect sursolid ...\n");
-    b = is_perfect_sursolid(6);
-    if (b)
-        return -1;
-    b = is_perfect_sursolid(64 * 16);
-    if (!b)
-        return -1;
-    b = is_perfect_sursolid(81);
-    if (b)
-        return -1;
-    b = is_perfect_sursolid(0x100500A00A005001ull);
-    if (!b)
-        return -1;
-    b = is_perfect_sursolid(0x100500A00A005000ull);
-    if (b)
-        return -1;
-    b = is_perfect_sursolid(0x100500A00A005002ull);
-    if (b)
-        return -1;
-
-    printf("Sphenic numbers\n");
-    unsigned sphenic[] = {30,  42,  66,  70,  78,  102, 105, 110, 114, 130, 138, 154, 165, 170, 174, 182, 186, 190,
-                          195, 222, 230, 231, 238, 246, 255, 258, 266, 273, 282, 285, 286, 290, 310, 318, 322, 345,
-                          354, 357, 366, 370, 374, 385, 399, 402, 406, 410, 418, 426, 429, 430, 434, 435, 438, 0};
-    unsigned psj = 3;
-    for (unsigned psi = 0; sphenic[psi]; psi++)
+    if (self_test_barrett_64() != 0)
     {
-        factor_v f;
-        while (psj < sphenic[psi])
-        {
-            f.clear();
-            uint64_all_factors(f, psj);
-            b = is_sphenic(f);
-            if (b)
-                return -1;
-            psj++;
-        }
-        f.clear();
-        uint64_all_factors(f, psj);
-        b = is_sphenic(f);
-        if (!b)
-            return -1;
-        psj++;
+        printf("Barrett tests failed\n");
+        return -1;
     }
-
-    printf("Perfect power ...\n");
-    unsigned perfect_powers[] = {1,   4,   8,   9,   16,  25,  27,  32,  36,  49,  64,   81,   100,  121, 125,
-                                 128, 144, 169, 196, 216, 225, 243, 256, 289, 324, 343,  361,  400,  441, 484,
-                                 512, 529, 576, 625, 676, 729, 784, 841, 900, 961, 1000, 1024, 1089, 0};
-    unsigned ppj = 1;
-    for (unsigned ppi = 0; perfect_powers[ppi]; ppi++)
-    {
-        while (ppj < perfect_powers[ppi])
-        {
-            b = is_perfect_power(ppj);
-            if (b)
-                return -1;
-            ppj++;
-        }
-        b = is_perfect_power(ppj);
-        if (!b)
-            return -1;
-        ppj++;
-    }
-    b = is_perfect_power(0x100500A00A005001ull);
-    if (!b)
-        return -1;
-    b = is_perfect_power(0x100500A00A005000ull);
-    if (b)
-        return -1;
-    b = is_perfect_power(0x100500A00A005002ull);
-    if (b)
-        return -1;
 
     printf("Gcd ...\n");
     s = 12;
@@ -189,139 +56,6 @@ static int self_test_64(void)
     t = 30;
     r = uint64_gcd(s, t);
     if (r != 6)
-        return -1;
-
-    printf("Jacobi ...\n");
-    s = 33;
-    t = 9999;
-    j = uint64_jacobi(s, t);
-    if (j != 0)
-        return -1;
-    s = 34;
-    t = 9999;
-    j = uint64_jacobi(s, t);
-    if (j != -1)
-        return -1;
-    s = 35;
-    t = 9999;
-    j = uint64_jacobi(s, t);
-    if (j != 1)
-        return -1;
-
-    printf("Kronecker ...\n");
-    s = 33;
-    t = 9999;
-    j = int64_kronecker(s, t);
-    if (j != 0)
-        return -1;
-    s = 34;
-    t = 9999;
-    j = int64_kronecker(s, t);
-    if (j != -1)
-        return -1;
-    s = 35;
-    t = 9999;
-    j = int64_kronecker(s, t);
-    if (j != 1)
-        return -1;
-    j = int64_kronecker(11, 101);
-    if (j != -1)
-        return -1;
-    j = int64_kronecker(-11, 101);
-    if (j != -1)
-        return -1;
-    j = int64_kronecker(13, 101);
-    if (j != 1)
-        return -1;
-    j = int64_kronecker(-13, 101);
-    if (j != 1)
-        return -1;
-    j = int64_kronecker(-1, 101);
-    if (j != 1)
-        return -1;
-    j = int64_kronecker(0, 101);
-    if (j != 0)
-        return -1;
-    j = int64_kronecker(1, 101);
-    if (j != 1)
-        return -1;
-    j = int64_kronecker(1, 0);
-    if (j != 1)
-        return -1;
-    j = int64_kronecker(2, 0);
-    if (j != 0)
-        return -1;
-    j = int64_kronecker(13, -101);
-    if (j != 1)
-        return -1;
-    j = int64_kronecker(-13, -101);
-    if (j != -1)
-        return -1;
-    j = int64_kronecker(-2, -11);
-    if (j != -1)
-        return -1;
-    j = int64_kronecker(-2, -9);
-    if (j != -1)
-        return -1;
-    j = int64_kronecker(-2, -7);
-    if (j != 1)
-        return -1;
-    j = int64_kronecker(-2, -5);
-    if (j != 1)
-        return -1;
-    j = int64_kronecker(-2, -3);
-    if (j != -1)
-        return -1;
-    j = int64_kronecker(-2, -1);
-    if (j != -1)
-        return -1;
-    j = int64_kronecker(-2, 1);
-    if (j != 1)
-        return 1;
-    j = int64_kronecker(-2, 3);
-    if (j != 1)
-        return 1;
-    j = int64_kronecker(-2, 5);
-    if (j != -1)
-        return -1;
-    j = int64_kronecker(-2, 7);
-    if (j != -1)
-        return -1;
-    j = int64_kronecker(-2, 9);
-    if (j != 1)
-        return -1;
-    j = int64_kronecker(-2, 11);
-    if (j != 1)
-        return -1;
-    j = int64_kronecker(2, 9);
-    if (j != 1)
-        return -1;
-    j = int64_kronecker(2, -9);
-    if (j != 1)
-        return -1;
-    j = int64_kronecker(2, 11);
-    if (j != -1)
-        return -1;
-    j = int64_kronecker(2, -11);
-    if (j != -1)
-        return -1;
-    j = int64_kronecker(3, 11);
-    if (j != 1)
-        return -1;
-    j = int64_kronecker(-3, 11);
-    if (j != -1)
-        return -1;
-    j = int64_kronecker(3, 13);
-    if (j != 1)
-        return -1;
-    j = int64_kronecker(-3, 13);
-    if (j != 1)
-        return -1;
-    j = int64_kronecker(3, 15);
-    if (j != 0)
-        return -1;
-    j = int64_kronecker(-3, 15);
-    if (j != 0)
         return -1;
 
     printf("Modinv ...\n");
@@ -346,7 +80,19 @@ static int self_test_64(void)
     if (r != 0)
         return -1;
 
-    printf("Power ...\n");
+    if (self_test_powers_64() != 0)
+    {
+        printf("Powers tests failed\n");
+        return -1;
+    }
+
+    if (self_test_jacobi_64() != 0)
+    {
+        printf("Jacobi - Kronecker tests failed\n");
+        return -1;
+    }
+
+    printf("Modular Power ...\n");
     barrett_t bt;
     barrett_precompute(&bt, 197);
     r = pow_mod(2, 0xfedc, 197);
@@ -494,43 +240,9 @@ static int self_test_64(void)
         return -1;
     }
 
-    printf("Integer square root\n");
-    s = 0x12;
-    t = uint64_isqrt(s * s);
-    if (t != s)
+    if (self_test_isqrt_64() != 0)
     {
-        return -1;
-    }
-
-    t = uint64_isqrt(s * s + 1);
-    if (t != s)
-    {
-        return -1;
-    }
-
-    s = 0x4321;
-    t = uint64_isqrt(s * s);
-    if (t != s)
-    {
-        return -1;
-    }
-
-    t = uint64_isqrt(s * s + 1);
-    if (t != s)
-    {
-        return -1;
-    }
-
-    s = 0x7654321;
-    t = uint64_isqrt(s * s);
-    if (t != s)
-    {
-        return -1;
-    }
-
-    t = uint64_isqrt(s * s + 1);
-    if (t != s)
-    {
+        printf("Integer square root failed\n");
         return -1;
     }
 
