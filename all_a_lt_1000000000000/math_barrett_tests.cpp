@@ -6,7 +6,7 @@ static int self_test_barrett_64(void)
     bool b;
     int j;
 
-    printf("Barrett reduction sanity checks\n");
+    printf("Barrett reduction sanity checks ...\n");
     barrett_t u;
     s = 101;
     barrett_precompute(&u, s);
@@ -36,7 +36,7 @@ static int self_test_barrett_64(void)
     if (r > 2 * s)
         return -1;
 
-    printf("Barrett reduction validity\n");
+    printf("Barrett reduction validity ...\n");
     for (unsigned bits = 2; bits < 61; bits++)
     {
         uint64_t m_table[] = {1ull << bits,

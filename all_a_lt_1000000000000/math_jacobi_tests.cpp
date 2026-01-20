@@ -27,6 +27,12 @@ static int slow_jacobi(uint64_t a, uint64_t n)
     return ((t ^ (t >> 1)) & 2) ? -1 : 1;
 }
 
+static int minus_one_kronecker(uint64_t n)
+{
+    assert(n > 0 && n % 2 == 1);
+    return (n & 2) ? -1 : 1;
+}
+
 static int self_test_jacobi_64(void)
 {
     uint64_t s, t;
@@ -187,6 +193,24 @@ static int self_test_jacobi_64(void)
     j = int64_kronecker(-3, 15);
     if (j != 0)
         return -1;
+
+    // check more negative numbers
+    for (int64_t tt = 201; tt < 301; tt += 2)
+    {
+        for (int64_t ss = -20; ss < 20; ss++)
+        {
+            if (ss)
+            {
+                int j = int64_kronecker(ss, tt);
+                int i = ss < 0 ? uint64_jacobi(-ss, tt) * minus_one_kronecker(tt) : uint64_jacobi(ss, tt);
+                if (i != j)
+                {
+                    return -1;
+                }
+            }
+        }
+    }
+
 
     // pass
     return 0;

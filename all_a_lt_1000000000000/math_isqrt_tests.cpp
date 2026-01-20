@@ -1,7 +1,7 @@
 
 static int self_test_isqrt_64(void)
 {
-    printf("Integer square root\n");
+    printf("Integer square root ...\n");
 
     // uint64_isqrt() is limited to 63 bits
     uint64_t test[] = {0x12,         0x21,         0x1234,       0x4321,       0x12345,      0x54321, 0x12345678ul,

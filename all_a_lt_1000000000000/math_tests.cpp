@@ -156,48 +156,48 @@ static int self_test_64(void)
         return -1;
 
     printf("Known primes ...\n");
-    b = uint64_is_prime(200003ull);
+    b = uint64_is_prime_mr(200003ull);
     if (!b)
     {
         printf("expected prime failed\n");
         return (-1);
     }
-    b = uint64_is_prime(2000003ull);
+    b = uint64_is_prime_mr(2000003ull);
     if (!b)
     {
         printf("expected prime failed\n");
         return (-1);
     }
-    b = uint64_is_prime(20000003ull);
+    b = uint64_is_prime_mr(20000003ull);
     if (!b)
     {
         printf("expected prime failed\n");
         return (-1);
     }
-    b = uint64_is_prime(2000000000003ull);
+    b = uint64_is_prime_mr(2000000000003ull);
     if (!b)
     {
         printf("expected prime failed\n");
         return (-1);
     }
-    b = uint64_is_prime(20000000000000003ull);
+    b = uint64_is_prime_mr(20000000000000003ull);
     if (!b)
     {
         printf("expected prime failed\n");
         return (-1);
     }
-    b = uint64_is_prime(200000000000000003ull);
+    b = uint64_is_prime_mr(200000000000000003ull);
     if (!b)
     {
         printf("expected prime failed\n");
         return (-1);
     }
 
-    printf("Isprime ...\n");
+    printf("Isprime (MR) ...\n");
     t = 1;
     t <<= 3;
     t -= 1;
-    b = uint64_is_prime(t);
+    b = uint64_is_prime_mr(t);
     if (!b)
     {
         printf("isprime M(3) failed\n");
@@ -205,7 +205,7 @@ static int self_test_64(void)
     }
 
     t = 101;
-    b = uint64_is_prime(t);
+    b = uint64_is_prime_mr(t);
     if (!b)
     {
         printf("isprime 101 failed\n");
@@ -213,7 +213,7 @@ static int self_test_64(void)
     }
 
     t = 4493;
-    b = uint64_is_prime(t);
+    b = uint64_is_prime_mr(t);
     if (!b)
     {
         printf("isprime 4493 failed\n");
@@ -223,7 +223,7 @@ static int self_test_64(void)
     t = 1;
     t <<= 31;
     t -= 1;
-    b = uint64_is_prime(t);
+    b = uint64_is_prime_mr(t);
     if (!b)
     {
         printf("isprime M(31) failed\n");
@@ -233,7 +233,55 @@ static int self_test_64(void)
     t = 1;
     t <<= 61;
     t -= 1;
-    b = uint64_is_prime(t);
+    b = uint64_is_prime_mr(t);
+    if (!b)
+    {
+        printf("isprime M(61) failed\n");
+        return -1;
+    }
+
+    printf("Isprime (BPSW) ...\n");
+
+    t = 1;
+    t <<= 3;
+    t -= 1;
+    b = uint64_is_prime_bpsw(t);
+    if (!b)
+    {
+        printf("isprime M(3) failed\n");
+        return -1;
+    }
+
+    t = 101;
+    b = uint64_is_prime_bpsw(t);
+    if (!b)
+    {
+        printf("isprime 101 failed\n");
+        return -1;
+    }
+
+    t = 4493;
+    b = uint64_is_prime_bpsw(t);
+    if (!b)
+    {
+        printf("isprime 4493 failed\n");
+        return -1;
+    }
+
+    t = 1;
+    t <<= 31;
+    t -= 1;
+    b = uint64_is_prime_bpsw(t);
+    if (!b)
+    {
+        printf("isprime M(31) failed\n");
+        return -1;
+    }
+
+    t = 1;
+    t <<= 61;
+    t -= 1;
+    b = uint64_is_prime_bpsw(t);
     if (!b)
     {
         printf("isprime M(61) failed\n");
@@ -247,6 +295,42 @@ static int self_test_64(void)
     }
 
     printf("Factors ...\n");
+
+    if (self_test_isqrt_64() != 0)
+    {
+        printf("Integer square root failed\n");
+        return -1;
+    }
+
+    printf("Factors ...\n");
+
+    t = uint64_small_factor(11 * 13);
+    if (t != 11)
+    {
+        printf("small factor failed\n");
+        return -1;
+    }
+
+    t = uint64_small_factor(101 * 103);
+    if (t != 101)
+    {
+        printf("small factor failed\n");
+        return -1;
+    }
+
+    t = uint64_small_factor(151 * 521);
+    if (t != 151)
+    {
+        printf("small factor failed\n");
+        return -1;
+    }
+
+    t = uint64_small_factor(157 * 521);
+    if (t != 1)
+    {
+        printf("small factor failed\n");
+        return -1;
+    }
 
     t = uint64_sqfof_factor(101 * 103);
     if (!(t == 101 || t == 103))

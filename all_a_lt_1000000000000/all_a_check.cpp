@@ -782,7 +782,7 @@ int main(int argc, char **argv)
             // ------------------------------------------------------------------------------
             if (f[0].count % 3 != 0)
             {
-		uint64_t p = f[0].prime;
+                uint64_t p = f[0].prime;
                 uint128_t p3 = (uint128_t)p * p * p;
                 uint128_t g = p3 - 1;
                 uint64_t R = g > (n - 1) ? (n - 1) : (n - 1) % g;

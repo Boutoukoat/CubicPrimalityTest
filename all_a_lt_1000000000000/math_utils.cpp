@@ -17,6 +17,9 @@ using namespace std;
 typedef unsigned __int128 uint128_t;
 typedef signed __int128 int128_t;
 
+static bool is_perfect_square(uint64_t a);
+static bool is_perfect_cube(uint64_t a);
+
 // --------------------------------------------------------------------------------------
 //
 // C optimized implementations of simple utilities
@@ -839,7 +842,7 @@ static bool witness(uint64_t n, uint64_t s, uint64_t d, uint64_t a)
 
 // deterministic primality test for n < 2^64.
 // Assume that small factors are already processed, assume n > 2
-bool uint64_is_prime(uint64_t n)
+bool uint64_is_prime_mr(uint64_t n)
 {
     uint64_t d = n / 2;
     uint64_t s = uint64_tzcnt(d);
@@ -870,6 +873,91 @@ bool uint64_is_prime(uint64_t n)
     return witness(n, s, d, 2) && witness(n, s, d, 3) && witness(n, s, d, 5) && witness(n, s, d, 7) &&
            witness(n, s, d, 11) && witness(n, s, d, 13) && witness(n, s, d, 17) && witness(n, s, d, 19) &&
            witness(n, s, d, 23) && witness(n, s, d, 29) && witness(n, s, d, 31) && witness(n, s, d, 37);
+}
+
+// deterministic primality test for n < 2^64.
+// Assume that small factors and small primes are already processed, assume n > 2
+// Assume n is not a perfect square
+
+static bool uint64_lucas(uint64_t n)
+{
+    int64_t d = 5;
+    int j;
+    int sgn = 1;
+
+    // process the sequence 5, -7, 9, -11, 13, -15 .....
+    while (1)
+    {
+        j = int64_kronecker(d * sgn, n);
+        if (j == 0)
+        {
+            return false; // composite
+        }
+        if (j == -1)
+        {
+            break; // quadratic non-residue
+        }
+        d += 2;
+        sgn = -sgn;
+    }
+
+    uint64_t D = d;
+    uint64_t e = n + 1;
+    uint64_t nU;
+    uint64_t bits = uint64_log_2(e);
+    uint64_t tmp;
+    uint128_t ttmp;
+    uint64_t U = 1;
+    uint64_t V = 1;
+    while (bits--)
+    {
+        nU = (sgn < 0) ? n - U : U;
+        ttmp = (uint128_t)nU * U;
+        U = mul_mod(U, V, n);
+
+        tmp = uint128_long_mod(ttmp, n);
+        ttmp = (uint128_t)tmp * D + (uint128_t)V * V;
+        ttmp += (ttmp & 1) ? n : 0;
+        V = uint128_long_mod(ttmp >> 1, n);
+        if ((e >> bits) & 1)
+        {
+            nU = (sgn < 0) ? n - U : U;
+            ttmp = (uint128_t)nU * D + V;
+            U = U + V;
+            U += (U & 1) ? n : 0;
+            U = U >> 1;
+            U -= (U >= n) ? n : 0;
+
+            ttmp += (ttmp & 1) ? n : 0;
+            V = uint128_long_mod(ttmp >> 1, n);
+        }
+    }
+    return (U == 0);
+}
+
+static bool uint64_is_prime_bpsw(uint64_t n)
+{
+    uint64_t d = n / 2;
+    uint64_t s = uint64_tzcnt(d);
+    d >>= s++;
+
+    bool b = witness(n, s, d, 2);
+    if (b != true)
+    {
+        return false; // composite
+    }
+    b = is_perfect_square(n);
+    if (b == true)
+    {
+        return false; // composite
+    }
+    b = uint64_lucas(n);
+    if (b != true)
+    {
+        return false; // composite
+    }
+    // really prime, proven to 2^64
+    return true;
 }
 
 // binary gcd
@@ -1416,7 +1504,7 @@ static void uint64_large_factors(factor_v &primes, uint64_t n)
         if (m == 1)
             continue;
 
-        if (m < 157 * 157 || uint64_is_prime(m))
+        if (m < 157 * 157 || uint64_is_prime_bpsw(m))
         {
             uint64_add_prime_factor(primes, m);
         }
