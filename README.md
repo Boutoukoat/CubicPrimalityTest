@@ -6,7 +6,7 @@ This is test code to verify a cubic primality test, based on linear recurrences
 
 The official paper describing the test and its proofs is work-in-progress
 
-So far, no counterexample (pseudo prime) has been found. 
+So far, no counterexample (pseudo prime) has been found. Exhaustive tests completed to 10^15
 
 # The maths
 
@@ -22,7 +22,7 @@ Quadratic PRP tests either have x in Zn or roots in complex numbers.
 
 Cubic PRP tests with kronecker(discriminant. n) == 1 can be chosen to have all three roots not in Zn.
 
-With b = a we can rapidly find a suitable B with the Mod(n,a)^((a-1)/3) != 1 test with parametric prime a = 7+k\*(k-1).
+With b = a we can rapidly find a suitable B with the Mod(n,a)^((a-1)/3) != 1 test, with parametric prime a = 7+k\*(k-1).
 
 # Simple utility based of GMP library for large integers
 
@@ -44,11 +44,13 @@ $ ./cubic 2^11213-1
 
 ```
 
-So far, no counterexample (pseudo prime) has been found. Exhaustive tests completed to 10^15
-
 # Complete user's guide :
 
 Later.
+
+# Limits
+
+GMP and memory limits apply.
 
 
 

@@ -1,5 +1,5 @@
 // -----------------------------------------------------------------------
-// Collatz step function calculator
+// Cubic primality check
 // -----------------------------------------------------------------------
 
 #include <assert.h>
@@ -611,7 +611,7 @@ static sieve_t uint64_composite_sieve(uint64_t a)
         return COMPOSITE_FOR_SURE; // divisible by 151
 
     // no factor less than 157
-    if (a <= 157 * 157)
+    if (a < 157 * 157)
         return PRIME_FOR_SURE; // prime
     return UNDECIDED;
 }
