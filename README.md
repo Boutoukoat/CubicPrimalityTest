@@ -8,6 +8,14 @@ The official paper describing the test and its proofs is work-in-progress
 
 So far, no counterexample (pseudo prime) has been found. Exhaustive tests completed to 10^15
 
+# See also
+
+See the following self-similar primality tests
+
+- SimplePrimalityTest
+- QuadraticPrimalityTest
+- CubicPrimalityTest
+
 # The maths
 
 Let irreducible f = x^3-a\*x-b such that kronecker(4\*a^3-27\*b^2, n) == 1.
