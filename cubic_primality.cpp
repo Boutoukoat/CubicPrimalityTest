@@ -738,8 +738,8 @@ static void uint64_exponentiate(uint64_t &s, uint64_t &t, uint64_t &u, uint64_t 
 }
 
 // Iterate a third order linear recurrence using "double and add" steps
-// Computes (s,t,u)^e mod n
-// Make output s,t,u < n
+// Computes (s,t,u)^e mod (n, x^3-ax-a)
+// Makes output s,t,u < n
 static void mpz_singlethread_exponentiate(mpz_t s, mpz_t t, mpz_t u, mpz_t e, uint64_t a, mod_precompute_t *p)
 {
     unsigned bit = mpz_sizeinbase(e, 2) - 1;

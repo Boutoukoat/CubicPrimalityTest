@@ -1,6 +1,6 @@
 
 
-GGG = g++ -Wall -O3 -march=native -fomit-frame-pointer -fexpensive-optimizations
+GGG = g++ -Wall -O3 -flto -march=native -fomit-frame-pointer -fexpensive-optimizations
 
 OBJ = cubic_primality_main.o \
       cubic_primality.o \

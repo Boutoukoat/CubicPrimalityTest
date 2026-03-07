@@ -8,7 +8,9 @@ static int slow_jacobi(uint64_t a, uint64_t n)
     while (a)
     {
         while (a % 4 == 0)
+        {
             a /= 4;
+        }
         if (a % 2 == 0)
         {
             t ^= n;
@@ -22,7 +24,9 @@ static int slow_jacobi(uint64_t a, uint64_t n)
     }
 
     if (n != 1)
+    {
         return 0;
+    }
 
     return ((t ^ (t >> 1)) & 2) ? -1 : 1;
 }
@@ -205,12 +209,12 @@ static int self_test_jacobi_64(void)
                 int i = ss < 0 ? uint64_jacobi(-ss, tt) * minus_one_kronecker(tt) : uint64_jacobi(ss, tt);
                 if (i != j)
                 {
+                    printf("Inconsistent jacobi/kronecker result\n");
                     return -1;
                 }
             }
         }
     }
-
 
     // pass
     return 0;

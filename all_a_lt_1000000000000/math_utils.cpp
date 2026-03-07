@@ -452,8 +452,6 @@ static uint64_t uint64_isqrt(uint64_t x)
     }
     // This code is based on the fact that
     // sqrt(x) == x^1/2 == 2^(log2(x)/2)
-    // Unfortunately it's a little more tricky
-    // when fast log2 is floored.
     uint64_t log2x = uint64_log_2(x);
     uint64_t log2y = log2x / 2;
     uint64_t y = 1ul << log2y;
@@ -833,7 +831,7 @@ static bool witness(uint64_t n, uint64_t s, uint64_t d, uint64_t a)
         x = y;
         --s;
     }
-    if (y != 1)
+    if (x != 1)
     {
         return false;
     }
