@@ -714,7 +714,7 @@ int main(int argc, char **argv)
 
     // round n to next composite, not multiple of 3, not multiple of 2
     n_start = (n_start < 25) ? 25 : (n_start | 1);
-    while (uint64_is_prime(n_start))
+    while (uint64_is_prime_mr(n_start))
     {
         n_start += 2;
     }
@@ -775,6 +775,7 @@ int main(int argc, char **argv)
         }
         else if (is_perfect_prime_power(f))
         {
+
             // ------------------------------------------------------------------------------
             // 1 factors with multiplicity n
             //
@@ -782,12 +783,9 @@ int main(int argc, char **argv)
             // ------------------------------------------------------------------------------
             if (f[0].count % 3 != 0)
             {
-                uint64_t p = f[0].prime;
-                uint128_t p3 = (uint128_t)p * p * p;
-                uint128_t g = p3 - 1;
-                uint64_t R = g > (n - 1) ? (n - 1) : (n - 1) % g;
+                uint64_t R = n - 1;
                 worked_prime_power_count += 1;
-                mt_verify_all_a(n, 0, R);
+                mt_verify_all_a(n, R, R);
             }
             else
             {
@@ -796,6 +794,7 @@ int main(int argc, char **argv)
         }
         else if (f[0].prime == 3)
         {
+
             // ------------------------------------------------------------------------------
             // multiple of 3
             //
@@ -807,31 +806,32 @@ int main(int argc, char **argv)
             {
                 uint64_t p = f[i].prime;
                 uint64_t Q = n / p;
-                uint128_t p3 = (uint128_t)p * p * p;
-                uint128_t Q3 = (uint128_t)Q * Q * Q;
-                uint128_t g = uint128_gcd(p3 - 1, Q3 - 1);
-                uint64_t R = g > (n - 1) ? (n - 1) : (n - 1) % g;
+                uint128_t p3 = (uint128_t)p * p * p % (n - 1);
+                uint128_t p6m1 = (uint128_t)(p3 * p3 - 1) % (n - 1);
+                uint128_t Qm1 = (uint128_t)Q - 1;
+                uint128_t Qmp = (uint128_t)Q > p ? Q - p : p - Q;
+                uint128_t g1 = uint128_gcd(p6m1, Qm1);
+                uint128_t g2 = uint128_gcd(p6m1, Qmp);
+                uint128_t g3 = uint128_gcd(g1, g2);
+                uint64_t R = (n - 1) % (g1 * g2 / g3);
                 if (R < 3 || (p != 5 && R == 4) || (p < V_COUNT && R < V[p]) || (R < p - 1 && p % 10 != 1))
                 {
                     // early terminate this number
                     break;
-                }
-                if (R < Rmin)
-                {
-                    Rmin = R;
                 }
             }
             if (i == f.size())
             {
                 // no early termination
                 worked_multiple3_count += 1;
-                mt_verify_all_a(n, 0, Rmin);
+                mt_verify_all_a(n, Rmin, Rmin);
             }
             else
             {
                 skip_multiple3_count += 1;
             }
         }
+
         else if (is_semiprime(f))
         {
             // ------------------------------------------------------------------------------
@@ -842,14 +842,16 @@ int main(int argc, char **argv)
             // ------------------------------------------------------------------------------
             uint64_t p = f[0].prime;
             uint64_t Q = f[1].prime;
-            uint128_t p3 = (uint128_t)p * p * p;
-            uint128_t Q3 = (uint128_t)Q * Q * Q;
-            uint128_t g = uint128_gcd(p3 - 1, Q3 - 1);
-            uint64_t R = g > (n - 1) ? (n - 1) : (n - 1) % g;
-            uint128_t An = (uint128_t)n * (n + 1) + 1;
-            uint64_t A = g > An ? An : An % g;
+            uint128_t p3 = (uint128_t)p * p * p % (n - 1);
+            uint128_t p6m1 = (uint128_t)(p3 * p3 - 1) % (n - 1);
+            uint128_t Q3 = (uint128_t)Q * Q * Q % (n - 1);
+            uint128_t Q6m1 = (uint128_t)(Q3 * Q3 - 1) % (n - 1);
+            uint128_t g = uint128_gcd(p6m1, Q6m1);
+            if (g == 0)
+                g = (uint128_t)n - 1;
+            uint64_t R = (uint64_t)(g > n - 1) ? n - 1 : (n - 1) % g;
             if (!(R < 3 || (p != 5 && R == 4) || (p < V_COUNT && R < V[p]) || (R < p - 1 && p % 10 != 1) ||
-                  (Q < V_COUNT && R < V[Q]) || (R < Q - 1 && Q % 10 != 1) || A < 4))
+                  (Q < V_COUNT && R < V[Q]) || (R < Q - 1 && Q % 10 != 1)))
             {
                 worked_semiprime_count += 1;
                 mt_verify_all_a(n, R, R);
@@ -861,29 +863,28 @@ int main(int argc, char **argv)
         }
         else if (is_squarefree(f))
         {
+
             // ------------------------------------------------------------------------------
             // All factors have multiplicity 1
             // ------------------------------------------------------------------------------
             uint64_t Rmin = n - 1;
-            uint128_t An = (uint128_t)n * (n + 1) + 1;
             uint64_t i;
             for (i = 0; i < f.size(); i++)
             {
                 uint64_t p = f[i].prime;
                 uint64_t Q = n / p;
-                uint128_t p3 = (uint128_t)p * p * p;
-                uint128_t Q3 = (uint128_t)Q * Q * Q;
-                uint128_t g = uint128_gcd(p3 - 1, Q3 - 1);
-                uint64_t R = g > (n - 1) ? (n - 1) : (n - 1) % g;
-                uint64_t A = g > An ? An : An % g;
-                if (R < 3 || (p != 5 && R == 4) || (p < V_COUNT && R < V[p]) || (R < p - 1 && p % 10 != 1) || A < 4)
+                uint128_t p3 = (uint128_t)p * p * p % (n - 1);
+                uint128_t p6m1 = (uint128_t)(p3 * p3 - 1) % (n - 1);
+                uint128_t Qm1 = (uint128_t)Q - 1;
+                uint128_t Qmp = (uint128_t)Q > p ? Q - p : p - Q;
+                uint128_t g1 = uint128_gcd(p6m1, Qm1);
+                uint128_t g2 = uint128_gcd(p6m1, Qmp);
+                uint128_t g3 = uint128_gcd(g1, g2);
+                uint64_t R = (n - 1) % (g1 * g2 / g3);
+                if (R < 3 || (p != 5 && R == 4) || (p < V_COUNT && R < V[p]) || (R < p - 1 && p % 10 != 1))
                 {
                     // early terminate this number
                     break;
-                }
-                if (R < Rmin)
-                {
-                    Rmin = R;
                 }
             }
             if (i == f.size())
@@ -909,17 +910,17 @@ int main(int argc, char **argv)
             {
                 uint64_t p = f[i].prime;
                 uint64_t Q = n / p;
-                uint128_t p3 = (uint128_t)p * p * p;
-                uint128_t Q3 = (uint128_t)Q * Q * Q;
-                uint128_t g = uint128_gcd(p3 - 1, Q3 - 1);
-                uint64_t R = g > (n - 1) ? (n - 1) : (n - 1) % g;
+                uint128_t p3 = (uint128_t)p * p * p % (n - 1);
+                uint128_t p6m1 = (uint128_t)(p3 * p3 - 1) % (n - 1);
+                uint128_t Qm1 = (uint128_t)Q - 1;
+                uint128_t Qmp = (uint128_t)Q > p ? Q - p : p - Q;
+                uint128_t g1 = uint128_gcd(p6m1, Qm1);
+                uint128_t g2 = uint128_gcd(p6m1, Qmp);
+                uint128_t g3 = uint128_gcd(g1, g2);
+                uint64_t R = (n - 1) % (g1 * g2 / g3);
                 if (R < 3 || (p != 5 && R == 4) || (p < V_COUNT && R < V[p]) || (R < p - 1 && p % 10 != 1))
                 {
                     break;
-                }
-                if (R < Rmin)
-                {
-                    Rmin = R;
                 }
             }
             if (i != f.size())
@@ -929,7 +930,7 @@ int main(int argc, char **argv)
             else
             {
                 worked_composite_count += 1;
-                mt_verify_all_a(n, 0, Rmin);
+                mt_verify_all_a(n, Rmin, Rmin);
             }
         }
 
