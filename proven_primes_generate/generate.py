@@ -1079,7 +1079,7 @@ def larger_prime(len, p):
     already_done = []
     already_failed = []
 
-    # sophie germain
+    # sophie germain   (q = 1)
     if bl <= len - 1 and p % 3 == 2:
         n = (p << 1) + 1
         if sieve(n):
@@ -1093,7 +1093,7 @@ def larger_prime(len, p):
                 if pow(2, p, n) == n - 1:
                     larger_prime(len, n)
 
-    # lifchitz
+    # lifchitz     (q = 2^k-1)
     for q in mersenne_primes_exponent[::-1]:
         if q in already_done or q in already_failed:
             continue
@@ -1171,13 +1171,15 @@ while i < argc:
 # ideally input number must be a proven prime
 # In case it looks composite, use the next probable prime found by brute force
 
+# cannot generate tiny primes, better if -s is much larger than prime array
 bound = 2 * small_primes[len(small_primes) - 1]
-while (n&1) == 0 or n <= bound or mr(5, n) == False:
-    print("Error : input seed must be a large prime (-s)\n")
-    # try some other number
+while (n&1) == 0 or n <= bound or n%5 == 0 or mr(5, n) == False:
+    print("Warning : input seed must be a quite large prime (-s)\n")
+    # try some other larger number
     n += bound
     n |= 1
 
+# cannot generate tiny primes, better if b > 10 or 20
 bound = 2 * bound.bit_length()
 if length < bound:
     print("Error : bit length must be quite large (-b)\n")
