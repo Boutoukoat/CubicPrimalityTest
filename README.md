@@ -14,7 +14,7 @@ See the following self-similar primality tests
 
 - SimplePrimalityTest
 - QuadraticPrimalityTest
-- CubicPrimalityTest
+- CipollaPrimalityTest
 
 # The maths
 
@@ -49,6 +49,14 @@ $ ./cubic 0x988a04da39838a3757afef4ae6ed84b092aa0ee673067e52140862e5d27af3adfd1d
 
 $ ./cubic 2^11213-1
 2^11213-1 might be prime, time=    3147.283 msecs.
+
+$ cat test.txt
+3^2+1
+3^2+2
+$ ./cubic -v -f test.txt
+3^2+1 ... composite for sure
+3^2+2 ... might be prime
+File test.txt done, 1 primes, 1 composites
 
 ```
 
