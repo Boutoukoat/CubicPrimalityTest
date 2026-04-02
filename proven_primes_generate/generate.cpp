@@ -134,9 +134,11 @@ static void next_prime(mpz_t p)
     if (bit_length < target_bit_length)
     {
         // prime is not large, continue the calculation
+	
+	// first try to let another worker to deal with this prime as a seed
         if (!post_prime(&mt, p))
         {
-            // queue might be full, do it
+            // queue might be full, do it in the current context
             worker(p);
         }
     }
@@ -148,7 +150,7 @@ static void next_prime(mpz_t p)
 //
 // --------------------------------------------------------------------------------------------------
 
-#define SMALL_PRIMES_COUNT 30000
+#define SMALL_PRIMES_COUNT 115000
 static unsigned int small_primes[SMALL_PRIMES_COUNT];
 
 static void generate_small_primes(void)
