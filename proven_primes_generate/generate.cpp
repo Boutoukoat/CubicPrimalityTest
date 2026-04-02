@@ -2,14 +2,14 @@
 #include <assert.h>
 #include <ctype.h>
 #include <math.h>
+#include <pthread.h>
+#include <semaphore.h>
 #include <stdint.h>
 #include <stdio.h>
 #include <stdlib.h>
-#include <unistd.h>
 #include <string.h>
 #include <time.h>
-#include <pthread.h>
-#include <semaphore.h>
+#include <unistd.h>
 #include <vector>
 
 using namespace std;
@@ -63,10 +63,10 @@ static bool post_prime(mod_multithread_t *mt, mpz_t p)
 {
     // push a prime to the queue
     int status = sem_trywait(&mt->queue_sem);
-    if (status) 
+    if (status)
     {
-	    // cannot pass the blocking condition
-	    return false;
+        // cannot pass the blocking condition
+        return false;
     }
     pthread_mutex_lock(&mt->queue_mutex);
     mpz_set(mt->queue[mt->queue_head++ & (MT_QUEUE_SIZE - 1)], p);
@@ -153,12 +153,12 @@ static unsigned int small_primes[SMALL_PRIMES_COUNT];
 
 static void generate_small_primes(void)
 {
-  mpz_t sp;
+    mpz_t sp;
     mpz_init_set_ui(sp, 3);
-    for(unsigned i = 0; i < SMALL_PRIMES_COUNT; i++)
+    for (unsigned i = 0; i < SMALL_PRIMES_COUNT; i++)
     {
-            small_primes[i] = mpz_get_ui(sp);
-            mpz_nextprime(sp, sp);
+        small_primes[i] = mpz_get_ui(sp);
+        mpz_nextprime(sp, sp);
     }
     mpz_clear(sp);
 }
@@ -442,7 +442,7 @@ static void worker(mpz_t p)
     // n = 1 + 2 * p
     while (current_prime_count < max_prime_count)
     {
-	already_checked.push_back(1);
+        already_checked.push_back(1);
         // n = 1 + 2 * p
         mpz_mul_2exp(tmp, p, 1);
         mpz_add_ui(n, tmp, 1);
@@ -459,9 +459,9 @@ static void worker(mpz_t p)
         }
         if ((mpz_get_ui(p) & 3) == 3)
         {
-            // Euler-lagrange deterministic primality test 
-	    // It is well known that if p==3 mod 4 is prime, 
-	    // n = 2p+1 is also prime if and only if n divides 2^p-1.
+            // Euler-lagrange deterministic primality test
+            // It is well known that if p==3 mod 4 is prime,
+            // n = 2p+1 is also prime if and only if n divides 2^p-1.
 
             // 2^p mod n == 1
             mpz_powm(r, two, p, n);
@@ -474,7 +474,7 @@ static void worker(mpz_t p)
         else
         {
             // Sophie-Germain deterministic primality test
-	    // If p==1 mod 4 is prime, n=2p+1 is also prime if and only if n divides 2^p + 1.
+            // If p==1 mod 4 is prime, n=2p+1 is also prime if and only if n divides 2^p + 1.
 
             // 2^p mod n == n-1
             mpz_powm(r, two, p, n);
@@ -504,12 +504,13 @@ static void worker(mpz_t p)
                 break;
             }
 
-	if (std::find(already_checked.begin(), already_checked.end(), mersenne_prime_exponent[i]) != already_checked.end())
-	{
-		// already tested
-		continue;
-	}
-	already_checked.push_back(mersenne_prime_exponent[i]);
+            if (std::find(already_checked.begin(), already_checked.end(), mersenne_prime_exponent[i]) !=
+                already_checked.end())
+            {
+                // already tested
+                continue;
+            }
+            already_checked.push_back(mersenne_prime_exponent[i]);
 
             if (mpz_composite_sieve(n) == COMPOSITE_FOR_SURE)
             {
@@ -543,12 +544,12 @@ static void worker(mpz_t p)
                 // number already too large
                 break;
             }
-	if (std::find(already_checked.begin(), already_checked.end(), small_primes[i]) != already_checked.end())
-	{
-		// already tested
-		continue;
-	}
-	// already_checked.push_back(small_primes[i]);
+            if (std::find(already_checked.begin(), already_checked.end(), small_primes[i]) != already_checked.end())
+            {
+                // already tested
+                continue;
+            }
+            // already_checked.push_back(small_primes[i]);
 
             if (mpz_composite_sieve(n) == COMPOSITE_FOR_SURE)
             {
@@ -607,7 +608,7 @@ static void *worker_thread(void *arg)
 
 int main(int argc, char **argv)
 {
-	mpz_t seed;
+    mpz_t seed;
     unsigned thread_count = 1;
     mpz_init_set_ui(seed, 7);
 
@@ -628,7 +629,7 @@ int main(int argc, char **argv)
             thread_count = strtoul(argv[++i], 0, 0);
             continue;
         }
-        if (!strcmp(argv[i], "-c") && i < argc-1)
+        if (!strcmp(argv[i], "-c") && i < argc - 1)
         {
             max_prime_count = strtoull(argv[++i], 0, 0);
             continue;
@@ -666,14 +667,14 @@ int main(int argc, char **argv)
     // make sure the seed is a prime  (BPSW test and 2 extra unnecessary rounds of Miller Rabin)
     if (!mpz_probab_prime_p(seed, 2))
     {
-	    printf("Input seed must be prime (option -s)\n");
-	    exit(1);
+        printf("Input seed must be prime (option -s)\n");
+        exit(1);
     }
 
     if (mpz_sizeinbase(seed, 2) > target_bit_length)
     {
-	    printf("Input seed is too large (conflict on -s, -b options)\n");
-	    exit(1);
+        printf("Input seed is too large (conflict on -s, -b options)\n");
+        exit(1);
     }
 
     if (thread_count < 1)
@@ -704,7 +705,7 @@ int main(int argc, char **argv)
     while (current_prime_count < max_prime_count)
     {
         sleep(1);
-	display_flush();
+        display_flush();
     }
 
     mpz_t zero;
