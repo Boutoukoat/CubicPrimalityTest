@@ -21,9 +21,11 @@ example: ./generate
 	@echo "done"
 	@echo
 
-proth: ./generate
-	# 32 threads, 80 primes of size up to 35000 bits, starting from a proven proth prime
-	./generate -t 32 -c 80 -verbose -b 35000 -s "3*2^34350 + 1"
+gigantic: ./generate
+	# 32 threads, compute 80 primes of size up to 33500 bits (approx 10100 digits), 
+	# starting from a 10000 digit proven prime
+	# (This takes hours)
+	./generate -t 32 -c 80 -verbose -b 33500 -s " (10^10000 - 1)/3 - 10^6333" 
 
 expression_parser.a : bison.gmp_expr.o lex.gmp_expr.o bison.gmp_expr.tab.h
 	ar vr expression_parser.a bison.gmp_expr.o lex.gmp_expr.o

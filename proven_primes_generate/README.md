@@ -54,7 +54,7 @@ e.g.
 and so on for p3, p4, p5 ..... until pn is small enough (e.g. < 2^64) to be confirmed as a prime.
 
 
-# Simple utility based of GMP library for large integers
+# Simple utility based on python for large integers
 
 Accept on command line the bit size of the generated primes 
 
@@ -78,6 +78,22 @@ $ python generate.py -b 1024
 0xd8ae592b935f810d92e72bb183e0a4985cb09a2eda39b24f22260e2f2ec482c77dcec0d9a662ee0904cc8d52d54297d40f8dd1e56c323797222da9ea6708850a9bede237ff7c7a543e3d9ed31e2d70ebb49fdd6f00fb2a9897e19bfd4c3755a1d43a82a06ebdae61f68c77377bf53d13351adaa6adbd1a38428355511d0af7df is prime
 
 
+```
+
+# Powerful C multithraded utility 
+
+How to generate 1000 512-bit proven primes with 3 threads, starting from (provable) prime 7 ? 
+
+```
+$ make
+$ ./generate -c 1000 -b 512 -s 7 -t 3
+```
+
+See also
+
+```
+$ make example 
+$ make gigantic 
 ```
 
 # Limits

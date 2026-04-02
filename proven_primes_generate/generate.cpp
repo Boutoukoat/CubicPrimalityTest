@@ -59,20 +59,27 @@ void mt_uninitialize(mod_multithread_t *mt)
     }
 }
 
-static void post_prime(mod_multithread_t *mt, mpz_t p)
+static bool post_prime(mod_multithread_t *mt, mpz_t p)
 {
-    // master : push a prime to the queue
-    sem_wait(&mt->queue_sem);
+    // push a prime to the queue
+    int status = sem_trywait(&mt->queue_sem);
+    if (status) 
+    {
+	    // cannot pass the blocking condition
+	    return false;
+    }
     pthread_mutex_lock(&mt->queue_mutex);
     mpz_set(mt->queue[mt->queue_head++ & (MT_QUEUE_SIZE - 1)], p);
     asm("" ::: "memory"); // prevent the compiler to optimize and move memory accesses across this line
     pthread_mutex_unlock(&mt->queue_mutex);
     pthread_cond_signal(&mt->queue_cond);
+    // post successful
+    return true;
 }
 
 static void get_prime(mod_multithread_t *mt, mpz_t p)
 {
-    // workers : get a new prime from the queue
+    // get a prime from the queue
     pthread_mutex_lock(&mt->queue_mutex);
     while (mt->queue_tail == mt->queue_head)
     {
@@ -102,6 +109,19 @@ static void display_prime(mpz_t p)
     pthread_mutex_unlock(&mt.display_mutex);
 }
 
+static void display_flush(void)
+{
+    pthread_mutex_lock(&mt.display_mutex);
+    fflush(stdout);
+    pthread_mutex_unlock(&mt.display_mutex);
+}
+
+// --------------------------------------------------------------------------------------------------
+//
+// Pass primes to another worker, best effort
+//
+// --------------------------------------------------------------------------------------------------
+
 static void next_prime(mpz_t p)
 {
     unsigned bit_length = mpz_sizeinbase(p, 2);
@@ -114,13 +134,7 @@ static void next_prime(mpz_t p)
     if (bit_length < target_bit_length)
     {
         // prime is not large, continue the calculation
-
-        if ((mt.queue_head - mt.queue_tail) < MT_QUEUE_SIZE)
-        {
-            // some room in the queue, let other threads do it
-            post_prime(&mt, p);
-        }
-        else
+        if (!post_prime(&mt, p))
         {
             // queue might be full, do it
             worker(p);
@@ -134,7 +148,7 @@ static void next_prime(mpz_t p)
 //
 // --------------------------------------------------------------------------------------------------
 
-#define SMALL_PRIMES_COUNT 15000
+#define SMALL_PRIMES_COUNT 30000
 static unsigned int small_primes[SMALL_PRIMES_COUNT];
 
 static void generate_small_primes(void)
@@ -690,6 +704,7 @@ int main(int argc, char **argv)
     while (current_prime_count < max_prime_count)
     {
         sleep(1);
+	display_flush();
     }
 
     mpz_t zero;
