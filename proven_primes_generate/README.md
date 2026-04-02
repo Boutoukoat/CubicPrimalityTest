@@ -25,12 +25,17 @@ if 2^p == n-1 mod n, then 1 + 2\*p\*q is prime
 Recursively, it is possible to build larger and larger proven primes with Pocklington theorem, Euler-Lagrange theorem, Sophie-Germain prime proofs, and many more.
 
 https://en.wikipedia.org/wiki/Pocklington_primality_test
+
 http://www.primenumbers.net/Henri/us/NouvTh1us.htm
+
 https://en.wikipedia.org/wiki/Safe_and_Sophie_Germain_primes
+
 
 # The maths upside-down
 
-To verify one of the generated number is a prime number, use a p-1 recursive algorithm
+To verify one of the generated number is a prime number, use one of the "p-1" recursive algorithms
+
+e.g. https://en.wikipedia.org/wiki/Pocklington_primality_test
 
 factor p1 = 1 + 2 * p2 * q2
 
