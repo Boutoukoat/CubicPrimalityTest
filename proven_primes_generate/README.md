@@ -18,14 +18,19 @@ could be proved prime with a reasonable verification
 e.g. well known Sophie Germain primes
 
 let q = 1
-let p = 1 mod 3 , p is a proven prime
-if 2^p == n-1 mod n, the 1 + 2\*p\*q is prime
+let p = 1 mod 3 , p being a proven prime 
 
-Recursively, it is possible to build larger and larger proven primes
+if 2^p == n-1 mod n, then 1 + 2\*p\*q is prime
+
+Recursively, it is possible to build larger and larger proven primes with Pocklington theorem, Euler-Lagrange theorem, Sophie-Germain prime proofs, and many more.
+
+https://en.wikipedia.org/wiki/Pocklington_primality_test
+http://www.primenumbers.net/Henri/us/NouvTh1us.htm
+https://en.wikipedia.org/wiki/Safe_and_Sophie_Germain_primes
 
 # The maths upside-down
 
-To verify one of the generated number is a prime number, use a p-1 algorithm
+To verify one of the generated number is a prime number, use a p-1 recursive algorithm
 
 factor p1 = 1 + 2 * p2 * q2
 
@@ -51,12 +56,12 @@ e.g.
 = 1 + 0x2 \* 0x43 \* 0xFB3FCB9EE55E568331BC775E678E9BC7EBEE053703F74BAE41DD65FFFB04283AE861A4CC2760BF71FB8B6F285090402A4A53C6386B77E2627C084F842F
 
 
-and so on for p3, p4, p5 ..... until pn is small enough (e.g. < 2^64) to be confirmed as a prime.
+and so on for p3, p4, p5 ..... until pn is small enough (e.g. < 2^64) to be confirmed as a proven prime.
 
 
 # Simple utility based on python for large integers
 
-Accept on command line the bit size of the generated primes 
+This utility accepts on command line the bit size of the generated primes 
 
 
 ```
@@ -89,7 +94,7 @@ $ make
 $ ./generate -c 1000 -b 512 -s 7 -t 3
 ```
 
-See also
+See also the generation of larger primes.
 
 ```
 $ make example 
