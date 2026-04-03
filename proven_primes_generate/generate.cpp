@@ -116,6 +116,11 @@ static void display_flush(void)
     pthread_mutex_unlock(&mt.display_mutex);
 }
 
+static inline uint64_t uint64_log_2(uint64_t a)
+{
+    return 63 - __builtin_clzll(a);
+}
+
 // --------------------------------------------------------------------------------------------------
 //
 // Pass primes to another worker, best effort
@@ -146,24 +151,45 @@ static void next_prime(mpz_t p)
 
 // --------------------------------------------------------------------------------------------------
 //
-// An array of small primes
+// An array of small primes in decreasing order
 //
 // --------------------------------------------------------------------------------------------------
 
-#define SMALL_PRIMES_COUNT 115000
+#define SMALL_PRIMES_COUNT 120000    // todo : adjust size depending on bitlength of max number, size > O(2 * ln(x))
 static unsigned int small_primes[SMALL_PRIMES_COUNT];
+static unsigned int small_primes_length[64];
 
 static void generate_small_primes(void)
 {
+	// fill an array of small primes
     mpz_t sp;
     mpz_init_set_ui(sp, 3);
-    for (unsigned i = 0; i < SMALL_PRIMES_COUNT; i++)
+    unsigned i = SMALL_PRIMES_COUNT;
+    while (i--)
     {
         small_primes[i] = mpz_get_ui(sp);
         mpz_nextprime(sp, sp);
     }
+    // fill an array of the length of small primes
+    for (i = 0; i < 64; i++)
+    {
+	    small_primes_length[i] = 0;
+    }
+    for (i = 0; i < SMALL_PRIMES_COUNT; i++)
+    {
+	    unsigned l = uint64_log_2(small_primes[i]);
+	    small_primes_length[l] = i;
+    }
     mpz_clear(sp);
 }
+
+// --------------------------------------------------------------------------------------------------
+//
+// An array of small mersenne exponents where (2^n+1)/3 is prime
+//
+// --------------------------------------------------------------------------------------------------
+
+static const unsigned mersenne_prime_exponent[] = {2, 3, 5, 7, 13, 17, 19, 31, 61, 127, 0};
 
 // --------------------------------------------------------------------------------------------------
 //
@@ -446,6 +472,7 @@ static void worker(mpz_t p)
     {
         already_checked.push_back(1);
         // n = 1 + 2 * p
+	// tmp = n-1
         mpz_mul_2exp(tmp, p, 1);
         mpz_add_ui(n, tmp, 1);
 
@@ -476,7 +503,8 @@ static void worker(mpz_t p)
         else
         {
             // Sophie-Germain deterministic primality test
-            // If p==1 mod 4 is prime, n=2p+1 is also prime if and only if n divides 2^p + 1.
+            // If p==1 mod 4 is prime, n=2p+1 is also prime if and only if n divides 2^p+1.
+	    // 
 
             // 2^p mod n == n-1
             mpz_powm(r, two, p, n);
@@ -490,19 +518,19 @@ static void worker(mpz_t p)
     }
 
     // Henri Lifschitz deterministic primality test
-    static const unsigned mersenne_prime_exponent[] = {2, 3, 5, 7, 13, 17, 19, 31, 61, 127, 0};
     for (unsigned i = 0; mersenne_prime_exponent[i] != 0 && current_prime_count < max_prime_count; i++)
     {
         // verify large prime p > 2 * q
         if (mpz_cmp_ui(p, 2 * mersenne_prime_exponent[i]) > 0)
         {
             // n = 1 + 2 * p * q
+	    // tmp = n-1
             mpz_mul_ui(tmp, p, 2 * mersenne_prime_exponent[i]);
             mpz_add_ui(n, tmp, 1);
 
             if (mpz_sizeinbase(n, 2) > target_bit_length)
             {
-                // number already too large
+                // the number is already too large
                 break;
             }
 
@@ -516,7 +544,7 @@ static void worker(mpz_t p)
 
             if (mpz_composite_sieve(n) == COMPOSITE_FOR_SURE)
             {
-                // number has a small factor
+                // the number has a small factor
                 continue;
             }
             // verify 2^n-1 mod n == 1
@@ -530,9 +558,18 @@ static void worker(mpz_t p)
     }
 
     // Pocklington deterministic primality test
-    for (unsigned i = 0; i < SMALL_PRIMES_COUNT && current_prime_count < max_prime_count; i++)
+    // https://en.wikipedia.org/wiki/Pocklington_primality_test#Generalized_Pocklington_test
+    
+    // Figure out where to start in the large array of primes
+    unsigned start = 0;
+    unsigned len_p  = mpz_sizeinbase(p, 2);
+    if (target_bit_length - len_p < 64)
     {
-        // verify large prime p > 2 * q
+	    start = small_primes_length[target_bit_length - len_p];
+    }
+    for (unsigned i = start; i < SMALL_PRIMES_COUNT && current_prime_count < max_prime_count; i++)
+    {
+        // verify large prime p > 2 * q implies p > sqrt(N)-1
         uint64_t q2 = 2 * small_primes[i];
         if (mpz_cmp_ui(p, q2) > 0)
         {
@@ -544,7 +581,7 @@ static void worker(mpz_t p)
             if (len_n > target_bit_length)
             {
                 // number already too large
-                break;
+                continue;
             }
             if (std::find(already_checked.begin(), already_checked.end(), small_primes[i]) != already_checked.end())
             {
@@ -673,6 +710,12 @@ int main(int argc, char **argv)
         exit(1);
     }
 
+    if (mpz_cmp_ui(seed, 7) < 0)
+    {
+        printf("Input seed is too small (option -s), must be >= 7\n");
+        exit(1);
+    }
+
     if (mpz_sizeinbase(seed, 2) > target_bit_length)
     {
         printf("Input seed is too large (conflict on -s, -b options)\n");
@@ -706,7 +749,7 @@ int main(int argc, char **argv)
 
     while (current_prime_count < max_prime_count)
     {
-        sleep(1);
+        usleep(500000);   // 1/2 s.
         display_flush();
     }
 
