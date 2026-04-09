@@ -874,7 +874,7 @@ bool uint64_is_prime_mr(uint64_t n)
 }
 
 // deterministic primality test for n < 2^64.
-// Assume that small factors and small primes are already processed, assume n > 2
+// Assume that small factors and small primes are already processed, assume n > 5
 // Assume n is not a perfect square
 
 static bool uint64_lucas(uint64_t n)
