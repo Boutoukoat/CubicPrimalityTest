@@ -61,7 +61,8 @@ static uint64_t uint256_tzcnt(uint256_t u)
 // binary gcd
 static uint256_t uint256_gcd(uint256_t u, uint256_t v)
 {
-    uint256_t t, k;
+    uint64_t k;
+    uint256_t t;
 
     if (u < v)
     {
