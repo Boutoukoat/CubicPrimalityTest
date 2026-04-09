@@ -32,13 +32,30 @@ typedef unsigned _BitInt(256) uint256_t;
 
 static uint64_t uint256_tzcnt(uint256_t u)
 {
-	uint256_t one = 1;
-	uint64_t t = 0;
-	while ((u & (one << t)) == 0)
+	// check low 64 bits
+	uint64_t v = (uint64_t)u;
+	if (v)
 	{
-		t++;
+		return uint64_tzcnt(v);
 	}
-	return t;
+	// low64 bits are zeroed, explore bits above 64
+	v = (uint64_t)(u >> 64);
+	if (v)
+	{
+		return 64 + uint64_tzcnt(v);
+	}
+	v = (uint64_t)(u >> 128);
+	if (v)
+	{
+		return 128 + uint64_tzcnt(v);
+	}
+	v = (uint64_t)(u >> 192);
+	if (v)
+	{
+		return 192 + uint64_tzcnt(v);
+	}
+	// completely zeroed input
+	return 256;
 }
 
 // binary gcd
