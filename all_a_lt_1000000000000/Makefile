@@ -1,5 +1,6 @@
 
-GGG=clang++ -O3 -std=c++2b -Wno-deprecated-volatile
+GGG=g++ -O3 -std=c++2b -Wno-deprecated-volatile -fopenmp -l gomp
+GGG=clang++ -O3 -std=c++2b -fopenmp=libgomp -Wno-deprecated-volatile
 
 # -----------------------------------------
 # single thread version
@@ -16,7 +17,8 @@ all: ./all_a ./all_ab
 #  parallel version
 # -----------------------------------------
 omp:
-	g++ -O3 -fopenmp -o ./all_a ./all_a_check.cpp -l gomp
+	$(GGG) -o ./all_a ./all_a_check.cpp 
+	$(GGG) -o ./all_ab ./all_ab_check.cpp
 
 # -----------------------------------------
 #  parallel version
