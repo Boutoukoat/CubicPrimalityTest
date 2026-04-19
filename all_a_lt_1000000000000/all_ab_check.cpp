@@ -5,19 +5,15 @@
 //
 // ---------------------------------------------------------------------------------
 
-// verify details of the cubic test
+// ---------------------------------------------------------------------------------
+// verify details of the cubic test for f = x^3 - a* x - b
 //
-// DEFUNCT
-// {gettime();forstep(n=25,1000000000000,2,
-// if(n%10000==1,print([n,gettime()]));
-// if(n%3!=0&&!ispseudoprime(n),p=factor(n)[1,1];Q=n/p;g=gcd(p^3-1,Q^3-1);R=(n-1)%g;
-//  if(R>2,A=(n^2+n+1)%g;
-//   if(A>3,
-//    for(k=1,(n+1)/2,
-//     if(k%3!=2,a=(7+k*(k-1))%n;
-//      if(Mod(a,n)^R==1,B=Mod(Mod(x,n),x^3-a*x-a)^R;
-//       if(B^2+B+1==-x^2+x+a,print([n,p,Q,g,R,A]);break(7)))))))));}
-//
+// forstep(n=15,1000000,2,if(!ispseudoprime(n)&&!issquare(n),
+//   for(b=1,(n-1)/2,if(Mod(b,n)^n==b,
+//     for(a=1,n-1,if(Mod(a,n)^(n-1)==1,
+//       D=4*a^3-27*b^2;if(kronecker(D,n)==1,
+//         f=x^3-a*x-b;B=Mod(Mod(x,n),f)^(n-1);
+//           if(x^2*(B^2+B+1)==a,print([n,a,b]);if(g==1,break(4))))))))));
 // -----------------------------------------------------------------------
 
 #include <assert.h>
@@ -32,30 +28,30 @@ typedef unsigned _BitInt(256) uint256_t;
 
 static uint64_t uint256_tzcnt(uint256_t u)
 {
-	// check low 64 bits
-	uint64_t v = (uint64_t)u;
-	if (v)
-	{
-		return uint64_tzcnt(v);
-	}
-	// low64 bits are zeroed, explore bits above 64
-	v = (uint64_t)(u >> 64);
-	if (v)
-	{
-		return 64 + uint64_tzcnt(v);
-	}
-	v = (uint64_t)(u >> 128);
-	if (v)
-	{
-		return 128 + uint64_tzcnt(v);
-	}
-	v = (uint64_t)(u >> 192);
-	if (v)
-	{
-		return 192 + uint64_tzcnt(v);
-	}
-	// completely zeroed input
-	return 256;
+    // check low 64 bits
+    uint64_t v = (uint64_t)u;
+    if (v)
+    {
+        return uint64_tzcnt(v);
+    }
+    // low64 bits are zeroed, explore bits above 64
+    v = (uint64_t)(u >> 64);
+    if (v)
+    {
+        return 64 + uint64_tzcnt(v);
+    }
+    v = (uint64_t)(u >> 128);
+    if (v)
+    {
+        return 128 + uint64_tzcnt(v);
+    }
+    v = (uint64_t)(u >> 192);
+    if (v)
+    {
+        return 192 + uint64_tzcnt(v);
+    }
+    // completely zeroed input
+    return 256;
 }
 
 // binary gcd
@@ -94,8 +90,6 @@ static uint256_t uint256_gcd(uint256_t u, uint256_t v)
     return u << k;
 }
 
-
-
 // compute Mod(Mod(x, n), x^3 -a*x -a)^e
 // assume n is less than 60 or 61 bits
 // assume a < n
@@ -129,10 +123,9 @@ static void cubic_exponentiate(uint64_t &s, uint64_t &t, uint64_t &u, uint64_t e
         {
             // finish Square and multiply by x
             tmp = tt;
-            tt = a*ss + uu;
-            uu = b*ss;
+            tt = a * ss + uu;
+            uu = b * ss;
             ss = tmp;
-//            tmp = uint128_long_mod(us, n);
         }
         s = uint128_long_mod(ss, n);
         t = uint128_long_mod(tt, n);
@@ -146,13 +139,12 @@ static void cubic_exponentiate(uint64_t &s, uint64_t &t, uint64_t &u, uint64_t e
 }
 
 // compute Mod(Mod(x, n), x^3 -a*x -a)^e with Barrett reduction
-// DO NOT USE
 static void barrett_cubic_exponentiate(uint64_t &s, uint64_t &t, uint64_t &u, uint64_t e, const barrett_t &bt,
                                        uint64_t a, uint64_t b)
 {
     int bit = uint64_log_2(e);
     uint64_t tmp;
-    uint128_t as2, bs2, t2, u2, ast, bst, tu, us, uu, ss, tt;
+    uint128_t as2, bs2, t2, u2, ast, bst, tu, us, uu, ss, tt, vv;
     while (bit--)
     {
         // start Square
@@ -170,21 +162,16 @@ static void barrett_cubic_exponentiate(uint64_t &s, uint64_t &t, uint64_t &u, ui
         bst <<= 1;
         tu <<= 1;
         us <<= 1;
+        ss = as2 + us + t2;
+        tt = bs2 + ast + tu;
+        uu = bst + u2;
         if (e & (1ull << bit))
         {
             // finish Square and multiply by x
-            us = (as2 + us + t2) * b;
-            tmp = barrett_long_mod(us, bt);
-            uu = (uint128_t)tmp * a;
-            ss = bs2 + ast + tu;
-            tt = uu + u2 + bst;
-        }
-        else
-        {
-            // finish Square
-            ss = as2 + us + t2;
-            tt = bs2 + ast + tu;
-            uu = bst + u2;
+            vv = tt;
+            tt = a * ss + uu;
+            uu = b * ss;
+            ss = vv;
         }
         // make sure the result s,t,u is <= 2 * m
         s = barrett_long_mod(ss, bt);
@@ -205,24 +192,24 @@ static void barrett_cubic_square(uint64_t &s, uint64_t &t, uint64_t &u, const ba
     uint128_t as2, bs2, t2, u2, ast, bst, tu, us, uu, ss, tt;
 
     // start Square
-        tmp = barrett_mul_mod(s, s, bt);
-        as2 = (uint128_t)tmp * a;
-        bs2 = (uint128_t)tmp * b;
-        t2 = (uint128_t)t * t;
-        u2 = (uint128_t)u * u;
-        tmp = barrett_mul_mod(s, t, bt);
-        ast = (uint128_t)tmp * a;
-        bst = (uint128_t)tmp * b;
-        tu = (uint128_t)t * u;
-        us = (uint128_t)u * s;
-        ast <<= 1;
-        bst <<= 1;
-        tu <<= 1;
-        us <<= 1;
+    tmp = barrett_mul_mod(s, s, bt);
+    as2 = (uint128_t)tmp * a;
+    bs2 = (uint128_t)tmp * b;
+    t2 = (uint128_t)t * t;
+    u2 = (uint128_t)u * u;
+    tmp = barrett_mul_mod(s, t, bt);
+    ast = (uint128_t)tmp * a;
+    bst = (uint128_t)tmp * b;
+    tu = (uint128_t)t * u;
+    us = (uint128_t)u * s;
+    ast <<= 1;
+    bst <<= 1;
+    tu <<= 1;
+    us <<= 1;
     // finish Square
-            ss = as2 + us + t2;
-            tt = bs2 + ast + tu;
-            uu = bst + u2;
+    ss = as2 + us + t2;
+    tt = bs2 + ast + tu;
+    uu = bst + u2;
     // make sure the result s,t,u is < m
     s = uint128_long_mod(ss, bt.m);
     t = uint128_long_mod(tt, bt.m);
@@ -375,95 +362,102 @@ void verify_all_a(uint64_t n, uint64_t q, uint64_t R_exp, uint64_t &modexp, uint
 
     struct barrett_t bn;
     barrett_precompute(&bn, n);
-    uint64_t R_exp_mod = R_exp%(q - 1);
-    if (R_exp_mod == 0) R_exp_mod = R_exp;
-    for (uint64_t b = 1; b < n>>1; b += 1)
-        {
+    uint64_t R_exp_mod = R_exp % (q - 1);
+    uint128_t n2_27 = (uint128_t)n * n * 27;
+    if (R_exp_mod == 0)
+        R_exp_mod = R_exp;
+    for (uint64_t b = 1; b < n >> 1; b += 1)
+    {
         if (barrett_pow_mod(b, n, bn) == b)
-            {
+        {
             modexp += (R_exp != 0);
             for (uint64_t a = 1; a < n; a += 1)
             {
-        // verify test Mod(a,n)^R_exp == 1
+                // verify test Mod(a,n)^R_exp == 1
                 modexp += (R_exp != 0);
-                if (pow_mod(a, R_exp_mod, q) == 1 &&
-                    barrett_pow_mod(a, R_exp, bn) == 1)
+                if (pow_mod(a, R_exp_mod, q) == 1 && barrett_pow_mod(a, R_exp, bn) == 1)
                 {
+                    uint128_t discriminant = (uint128_t)a * a * a * 4 + (n2_27 - (uint128_t)b * b * 27);
+                    uint64_t disc = uint128_long_mod(discriminant, n);
+                    if (uint64_jacobi(disc, n) != 1)
+                    {
+                        continue;
+                    }
                     exponentiate += 1;
                     // run cubic test
                     // B = Mod(x, n)
                     uint64_t bs = 0;
-            	    uint64_t bt = 1;
-            	    uint64_t bu = 0;
+                    uint64_t bt = 1;
+                    uint64_t bu = 0;
                     // B = Mod(B, x^3 -ax -a)^R_exp
                     cubic_exponentiate(bs, bt, bu, R_exp, n, a, b);
                     // B2 = B
                     uint64_t bs2 = bs;
                     uint64_t bt2 = bt;
                     uint64_t bu2 = bu;
-	    	    uint64_t tmp;
-            	    // B2 = Mod(B2, x^3 -ax -a)^2
-            	    barrett_cubic_square(bs2, bt2, bu2, bn, a, b);
-            	    bs = bs2 + bs;
-            	    bt = bt2 + bt;
-            	    bu = bu2 + bu + 1;
-	    	    // check x2*(B2+B+1) == (a*s + u)*x^2 + (b*s + a*t)*x + b*t
-	    	    tmp = b * bt % n;
-	            bt = (b * bs + a * bt) % n;
-               	    // check x^2(B2+B+1) is NOT a
-            	    //bs2 = uint64_add_mod(bs2, bs, n);
-            	    if (bt == 0)
+                    uint64_t tmp;
+                    // B2 = Mod(B2, x^3 -ax -a)^2
+                    barrett_cubic_square(bs2, bt2, bu2, bn, a, b);
+                    bs = bs2 + bs;
+                    bt = bt2 + bt;
+                    bu = bu2 + bu + 1;
+                    // check x2*(B2+B+1) == (a*s + u)*x^2 + (b*s + a*t)*x + b*t
+                    tmp = b * bt % n;
+                    bt = (b * bs + a * bt) % n;
+                    // check x^2(B2+B+1) is NOT a
+                    // bs2 = uint64_add_mod(bs2, bs, n);
+                    if (bt == 0)
                     {
-              		bs = (a * bs + bu) %n;
-              		if (bs == 0)
-                	    {
-	            		bu = tmp;
-                    		if (bu == a)
-                    		{
-                                    // Aoutch, n = p*Q could be prime or pseudoprime ??!!??!!
-                        	    char buff[256];
-                                    char *ptr = buff;
-                           	    *ptr++ = '[';
-                        	    ptr += uint128_sprint(ptr, n);
-                                    *ptr++ = ',';
-                        	    ptr += uint128_sprint(ptr, a);
-                        	    *ptr++ = ',';
-                        	    ptr += uint128_sprint(ptr, b);
-                        	    *ptr++ = ',';
-                        	    ptr += uint128_sprint(ptr, R_exp);
-                        	    *ptr++ = ']';
-                        	    *ptr = 0;
-                        	    printf("%s\n", buff);
-                        	    fflush(stdout);
+                        bs = (a * bs + bu) % n;
+                        if (bs == 0)
+                        {
+                            bu = tmp;
+                            if (bu == a)
+                            {
+                                // Aoutch, n = p*Q could be prime or pseudoprime ??!!??!!
+                                char buff[256];
+                                char *ptr = buff;
+                                *ptr++ = '[';
+                                ptr += uint128_sprint(ptr, n);
+                                *ptr++ = ',';
+                                ptr += uint128_sprint(ptr, a);
+                                *ptr++ = ',';
+                                ptr += uint128_sprint(ptr, b);
+                                *ptr++ = ',';
+                                ptr += uint128_sprint(ptr, R_exp);
+                                *ptr++ = ']';
+                                *ptr = 0;
+                                printf("%s\n", buff);
+                                fflush(stdout);
 
-                        	    // got 1 counter-example, it is time to stop
-                        	    exit(1);
-                    		}
-                    		else
-                    		{
-                        	    // polynomial test :
-                        	    // n is composite for sure
-                    		}
-                	    }
-                	    else
-                	    {
-                    	    	// polynomial test :
-                            	// n is composite for sure
-                	    }
-            		}
-            		else
-            		{
-                	    // polynomial test :
-                  	    // n is composite for sure
-            		}
-        	    }
-        	else
-          	{
+                                // got 1 counter-example, it is time to stop
+                                exit(1);
+                            }
+                            else
+                            {
+                                // polynomial test :
+                                // n is composite for sure
+                            }
+                        }
+                        else
+                        {
+                            // polynomial test :
+                            // n is composite for sure
+                        }
+                    }
+                    else
+                    {
+                        // polynomial test :
+                        // n is composite for sure
+                    }
+                }
+                else
+                {
                     // modexp test :
-            	    // n is composite for sure
-        	}
-    	    }
-	}
+                    // n is composite for sure
+                }
+            }
+        }
     }
 }
 
@@ -479,8 +473,8 @@ void verify_all_a(uint64_t n, uint64_t q, uint64_t R_exp, uint64_t &modexp, uint
 struct ring_entry_t
 {
     uint64_t __attribute__((aligned(64))) n; // composite number n
-    uint64_t q_prime;                       // fermat exponent (can be 0 == skip fermat test)
-    uint64_t R_exp;                        // cubic exponentiation exponent
+    uint64_t q_prime;                        // fermat exponent (can be 0 == skip fermat test)
+    uint64_t R_exp;                          // cubic exponentiation exponent
     uint64_t modexp;                         // count of modexp for that n
     uint64_t exponentiate;                   // count of exponentiate for that n
 };
@@ -864,7 +858,7 @@ int main(int argc, char **argv)
             // ------------------------------------------------------------------------------
             if (f[0].count % 3 != 0)
             {
-		worked_prime_power_count += 1;
+                worked_prime_power_count += 1;
                 mt_verify_all_a(n, f[0].prime, n - 1);
             }
             else
@@ -884,23 +878,23 @@ int main(int argc, char **argv)
             {
                 uint64_t p = f[i].prime;
                 uint64_t Q = n / p;
-		uint256_t p6m1 = (uint256_t)p*p*p * p*p*p -1;
-		uint256_t Qm1 = (uint256_t)Q - 1;
-		uint256_t Qmp = (uint256_t)Q > p ? Q - p : p - Q;
-		uint256_t g1 = uint256_gcd(p6m1, Qm1);
-		uint256_t g2 = uint256_gcd(p6m1, Qmp);
-		uint256_t g3 = uint256_gcd(g1, g2);
-		uint256_t lcm =  (g1 * g2 / g3);
-		uint64_t R = (lcm > n - 1) ? (n - 1) : (n - 1) % (uint64_t)lcm;
+                uint256_t p6m1 = (uint256_t)p * p * p * p * p * p - 1;
+                uint256_t Qm1 = (uint256_t)Q - 1;
+                uint256_t Qmp = (uint256_t)Q > p ? Q - p : p - Q;
+                uint256_t g1 = uint256_gcd(p6m1, Qm1);
+                uint256_t g2 = uint256_gcd(p6m1, Qmp);
+                uint256_t g3 = uint256_gcd(g1, g2);
+                uint256_t lcm = (g1 * g2 / g3);
+                uint64_t R = (lcm > n - 1) ? (n - 1) : (n - 1) % (uint64_t)lcm;
                 if ((R < 2) || (p != 5 && R == 4))
                 {
                     // early terminate this number
                     break;
                 }
- 		uint256_t Q6m1 = (uint256_t)Q*Q*Q *Q*Q*Q - 1;
-  		uint256_t g = uint256_gcd(p6m1, Q6m1);
-		R = (g > n - 1) ? (n - 1) : (n - 1) % (uint64_t)g;
-		if ((R < 2) || (p != 5 && R == 4))
+                uint256_t Q6m1 = (uint256_t)Q * Q * Q * Q * Q * Q - 1;
+                uint256_t g = uint256_gcd(p6m1, Q6m1);
+                R = (g > n - 1) ? (n - 1) : (n - 1) % (uint64_t)g;
+                if ((R < 2) || (p != 5 && R == 4))
                 {
                     // early terminate this number
                     break;
@@ -927,40 +921,40 @@ int main(int argc, char **argv)
             // ------------------------------------------------------------------------------
             uint64_t p = f[0].prime;
             uint64_t Q = f[1].prime;
-	    uint256_t p6m1 = (uint256_t)p*p*p * p*p*p -1;
-	    uint256_t Qm1 = (uint256_t)Q - 1;
-	    uint256_t Qmp = (uint256_t)Q > p ? Q - p : p - Q;
-	    uint256_t g1 = uint256_gcd(p6m1, Qm1);
-	    uint256_t g2 = uint256_gcd(p6m1, Qmp);
-	    uint256_t g3 = uint256_gcd(g1, g2);
-	    uint256_t lcm =  g1 * g2 / g3;
-	    uint64_t R = (lcm > n - 1) ? (n - 1) : (n - 1) % (uint64_t)lcm;
+            uint256_t p6m1 = (uint256_t)p * p * p * p * p * p - 1;
+            uint256_t Qm1 = (uint256_t)Q - 1;
+            uint256_t Qmp = (uint256_t)Q > p ? Q - p : p - Q;
+            uint256_t g1 = uint256_gcd(p6m1, Qm1);
+            uint256_t g2 = uint256_gcd(p6m1, Qmp);
+            uint256_t g3 = uint256_gcd(g1, g2);
+            uint256_t lcm = g1 * g2 / g3;
+            uint64_t R = (lcm > n - 1) ? (n - 1) : (n - 1) % (uint64_t)lcm;
             if (!(R < 2 || (p != 5 && R == 4)))
             {
- 		uint256_t Q6m1 = (uint256_t)Q*Q*Q *Q*Q*Q - 1;
-		uint256_t pm1 = (uint256_t)p - 1;
-	        g1 = uint256_gcd(Q6m1, pm1);
-		g2 = uint256_gcd(Q6m1, Qmp);
-		g3 = uint256_gcd(g1, g2);
-    	        uint256_t lcm =  g1 * g2 / g3;
-	        uint64_t R = (lcm > n - 1) ? (n - 1) : (n - 1) % (uint64_t)lcm;
+                uint256_t Q6m1 = (uint256_t)Q * Q * Q * Q * Q * Q - 1;
+                uint256_t pm1 = (uint256_t)p - 1;
+                g1 = uint256_gcd(Q6m1, pm1);
+                g2 = uint256_gcd(Q6m1, Qmp);
+                g3 = uint256_gcd(g1, g2);
+                uint256_t lcm = g1 * g2 / g3;
+                uint64_t R = (lcm > n - 1) ? (n - 1) : (n - 1) % (uint64_t)lcm;
                 if (!(R < 2 || (Q != 5 && R == 4)))
                 {
-  		    uint256_t g = uint256_gcd(p6m1, Q6m1);
-         	    R = (g > n - 1) ? (n - 1) : (n - 1) % (uint64_t)g;
-		    if (!((R < 2) || (p != 5 && R == 4)))
+                    uint256_t g = uint256_gcd(p6m1, Q6m1);
+                    R = (g > n - 1) ? (n - 1) : (n - 1) % (uint64_t)g;
+                    if (!((R < 2) || (p != 5 && R == 4)))
                     {
                         worked_semiprime_count += 1;
-                	mt_verify_all_a(n, Q, n - 1);
-            	    }
-	            else
-        	    {
-                	skip_semiprime_count += 1;
-            	    }
-	        }
+                        mt_verify_all_a(n, Q, n - 1);
+                    }
+                    else
+                    {
+                        skip_semiprime_count += 1;
+                    }
+                }
                 else
                 {
-        	    skip_semiprime_count += 1;
+                    skip_semiprime_count += 1;
                 }
             }
             else
@@ -979,25 +973,24 @@ int main(int argc, char **argv)
             {
                 uint64_t p = f[i].prime;
                 uint64_t Q = n / p;
-		uint256_t p6m1 = (uint256_t)p*p*p * p*p*p -1;
-		uint256_t Qm1 = (uint256_t)Q - 1;
-		uint256_t Qmp = (uint256_t)Q > p ? Q - p : p - Q;
-		uint256_t g1 = uint256_gcd(p6m1, Qm1);
-		uint256_t g2 = uint256_gcd(p6m1, Qmp);
-		uint256_t g3 = uint256_gcd(g1, g2);
-		uint256_t lcm =  g1 * g2 / g3;
-		uint64_t R = (lcm > n - 1) ? (n - 1) : (n - 1) % (uint64_t)lcm;
+                uint256_t p6m1 = (uint256_t)p * p * p * p * p * p - 1;
+                uint256_t Qm1 = (uint256_t)Q - 1;
+                uint256_t Qmp = (uint256_t)Q > p ? Q - p : p - Q;
+                uint256_t g1 = uint256_gcd(p6m1, Qm1);
+                uint256_t g2 = uint256_gcd(p6m1, Qmp);
+                uint256_t g3 = uint256_gcd(g1, g2);
+                uint256_t lcm = g1 * g2 / g3;
+                uint64_t R = (lcm > n - 1) ? (n - 1) : (n - 1) % (uint64_t)lcm;
                 if (R < 2 || (p != 5 && R == 4))
                 {
                     // early terminate this number
                     break;
                 }
- 		uint256_t Q6m1 = (uint256_t)Q*Q*Q *Q*Q*Q - 1;
-  		uint256_t g = uint256_gcd(p6m1, Q6m1);
+                uint256_t Q6m1 = (uint256_t)Q * Q * Q * Q * Q * Q - 1;
+                uint256_t g = uint256_gcd(p6m1, Q6m1);
                 R = (g > n - 1) ? (n - 1) : (n - 1) % (uint64_t)g;
-		if (R < 2 || (p != 5 && R == 4))
+                if (R < 2 || (p != 5 && R == 4))
                 {
-
 
                     // early terminate this number
                     break;
@@ -1025,22 +1018,22 @@ int main(int argc, char **argv)
             {
                 uint64_t p = f[i].prime;
                 uint64_t Q = n / p;
-		uint256_t p6m1 = (uint256_t)p*p*p * p*p*p -1;
-		uint256_t Qm1 = (uint256_t)Q - 1;
-		uint256_t Qmp = (uint256_t)Q > p ? Q - p : p - Q;
-		uint256_t g1 = uint256_gcd(p6m1, Qm1);
-		uint256_t g2 = uint256_gcd(p6m1, Qmp);
-		uint256_t g3 = uint256_gcd(g1, g2);
-		uint256_t lcm =  g1 * g2 / g3;
-		uint64_t R = (lcm > n - 1) ? (n - 1) : (n - 1) % (uint64_t)lcm;
+                uint256_t p6m1 = (uint256_t)p * p * p * p * p * p - 1;
+                uint256_t Qm1 = (uint256_t)Q - 1;
+                uint256_t Qmp = (uint256_t)Q > p ? Q - p : p - Q;
+                uint256_t g1 = uint256_gcd(p6m1, Qm1);
+                uint256_t g2 = uint256_gcd(p6m1, Qmp);
+                uint256_t g3 = uint256_gcd(g1, g2);
+                uint256_t lcm = g1 * g2 / g3;
+                uint64_t R = (lcm > n - 1) ? (n - 1) : (n - 1) % (uint64_t)lcm;
                 if (R < 2 || (p != 5 && R == 4))
                 {
                     break;
                 }
- 		uint256_t Q6m1 = (uint256_t)Q*Q*Q *Q*Q*Q - 1;
-  		uint64_t g = uint256_gcd(p6m1, Q6m1);
+                uint256_t Q6m1 = (uint256_t)Q * Q * Q * Q * Q * Q - 1;
+                uint64_t g = uint256_gcd(p6m1, Q6m1);
                 R = (g > n - 1) ? (n - 1) : (n - 1) % (uint64_t)g;
-		if (R < 2 || (p != 5 && R == 4))
+                if (R < 2 || (p != 5 && R == 4))
                 {
 
                     // early terminate this number
