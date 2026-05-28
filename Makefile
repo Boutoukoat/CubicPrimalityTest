@@ -18,7 +18,10 @@ cubic_primality_main.o: cubic_primality_main.cpp cubic_primality.h cubic_primali
 cubic_primality_alloc.o: cubic_primality_alloc.cpp cubic_primality_alloc.h
 	$(GGG) -c -o cubic_primality_alloc.o cubic_primality_alloc.cpp
 
-cubic_primality.o: cubic_primality.cpp cubic_primality.h
+cubic_primality_precompute.o: cubic_primality_precompute.cpp cubic_primality_precompute.h
+	$(GGG) -c -o cubic_primality_precompute.o cubic_primality_precompute.cpp
+
+cubic_primality.o: cubic_primality.cpp cubic_primality.h cubic_primality_precompute.h
 	$(GGG) -c -o cubic_primality.o cubic_primality.cpp
 
 expression_parser.a : bison.gmp_expr.o lex.gmp_expr.o bison.gmp_expr.tab.h
@@ -31,7 +34,7 @@ bison.gmp_expr.tab.c bison.gmp_expr.tab.h : parser.y
 	bison -d parser.y
 
 lex.gmp_expr.o : lex.gmp_expr.c
-	$(GGG) -Wno-unused-function -c -o lex.gmp_expr.o lex.gmp_expr.c
+	$(GGG) -Wno-unused-function -DYY_BUF_SIZE=65540 -DYYLMAX=65540 -c -o lex.gmp_expr.o lex.gmp_expr.c
 
 lex.gmp_expr.c : parser.l bison.gmp_expr.tab.h
 	flex parser.l

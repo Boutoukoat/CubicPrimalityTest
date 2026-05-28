@@ -1034,6 +1034,19 @@ void cubic_primality_self_test(void)
     // ---------------------------------------------------------------------------------
     printf("Large primes (mpz)\n");
 
+    // large proth prime 333*2^448+1
+    mpz_set_ui(ma, 333);
+    mpz_mul_2exp(ma, ma, 448);
+    mpz_add_ui(ma, ma, 1);
+    assert(mpz_cubic_primality(ma) == true);
+
+    // Large Riesel prime 100000000000037*2^5982-1
+    mpz_set_ui(ma, 1);
+    mpz_mul_2exp(ma, ma , 5982);
+    mpz_mul_ui(ma, ma , 100000000000037ul);
+    mpz_sub_ui(ma, ma, 1ul);
+    assert(mpz_cubic_primality(ma) == true);
+
     // 11111...6442446...11111 (1001-digits) The smallest zeroless titanic palindromic prime
     // https://t5k.org/curios/page.php?number_id=3797
     char titanic[1002];
