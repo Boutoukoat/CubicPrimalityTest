@@ -503,6 +503,27 @@ static void mpz_exponentiate(mpz_t s, mpz_t t, mpz_t u, mpz_t e, uint64_t a, mod
     while (bit--)
     {
         // Double
+#if 1
+        // fast sequence  (square only)
+        mpz_mul(s2, s, s);
+        mpz_mul(t2, t, t);
+        mpz_mul(u2, u, u);
+        mpz_add(st, s, t);
+        mpz_add(tu, t, u);
+        mpz_add(us, u, s);
+        mpz_mul(st, st, st);
+        mpz_mul(tu, tu, tu);
+        mpz_mul(us, us, us);
+        mpz_sub(st, st, s2);
+        mpz_sub(st, st, t2);
+        mpz_sub(tu, tu, t2);
+        mpz_sub(tu, tu, u2);
+        mpz_sub(us, us, u2);
+        mpz_sub(us, us, s2);
+        mpz_mul_ui(s2, s2, a);
+        mpz_mul_ui(st, st, a);
+#else
+        // slow sequence  (half squares, half multiplies)
         mpz_mul(s2, s, s);
         mpz_mul_ui(s2, s2, a);
         mpz_mul(t2, t, t);
@@ -514,6 +535,7 @@ static void mpz_exponentiate(mpz_t s, mpz_t t, mpz_t u, mpz_t e, uint64_t a, mod
         mpz_mul_2exp(st, st, 1);
         mpz_mul_2exp(tu, tu, 1);
         mpz_mul_2exp(us, us, 1);
+#endif
         if (mpz_tstbit(e, bit))
         {
             // add
@@ -1042,8 +1064,8 @@ void cubic_primality_self_test(void)
 
     // Large Riesel prime 100000000000037*2^5982-1
     mpz_set_ui(ma, 1);
-    mpz_mul_2exp(ma, ma , 5982);
-    mpz_mul_ui(ma, ma , 100000000000037ul);
+    mpz_mul_2exp(ma, ma, 5982);
+    mpz_mul_ui(ma, ma, 100000000000037ul);
     mpz_sub_ui(ma, ma, 1ul);
     assert(mpz_cubic_primality(ma) == true);
 
