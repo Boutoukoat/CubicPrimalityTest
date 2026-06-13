@@ -571,7 +571,8 @@ static void mpz_exponentiate(mpz_t s, mpz_t t, mpz_t u, mpz_t e, uint64_t a, mod
     mpz_mod_slow_reduce(t, p);
     mpz_mod_slow_reduce(u, p);
 
-    mpz_clears(tmp, s2, t2, u2, st, tu, us, tmp_s2, tmp_t2, tmp_u2, 0);
+    mpz_clears(s2, t2, u2, st, tu, us, tmp_s2, tmp_t2, tmp_u2, 0);
+    mpz_clear(tmp);
 }
 
 static bool uint64_cubic_primality(uint64_t n, bool verbose = false)
