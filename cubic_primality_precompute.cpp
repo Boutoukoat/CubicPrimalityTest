@@ -11,7 +11,7 @@
 
 typedef unsigned __int128 uint128_t;
 
-static uint64_t round_up(uint64_t a, uint64_t b)
+static uint64_t uint64_round_up(uint64_t a, uint64_t b)
 {
     a += b - 1;
     a /= b;
@@ -127,10 +127,10 @@ struct mod_precompute_t *mpz_mod_precompute(mpz_t n, uint64_t log2a, bool verbos
 
     if (!p->special_case)
     {
-        // precompute a variant of Barrett reduction mod m = n*a, and avoid mid-limbs boundaries
+        // precompute a variant of Barrett reduction mod n where numbers to reduce are O(a *n * n)
         // b = 2^(3n/2) / n
         // a = 2^(3n/2) % n
-        p->n = round_up(p->n + log2a, 64);
+        p->n = uint64_round_up(p->n + log2a, 64);
         p->n2 = p->n >> 1;
         p->n32 = p->n + p->n2;
         mpz_set_ui(tmp, 1);
