@@ -11,7 +11,15 @@
 
 typedef unsigned __int128 uint128_t;
 
-struct mod_precompute_t *mpz_mod_precompute(mpz_t n, bool verbose)
+static uint64_t round_up(uint64_t a, uint64_t b)
+{
+    a += b - 1;
+    a /= b;
+    a *= b;
+    return a;
+}
+
+struct mod_precompute_t *mpz_mod_precompute(mpz_t n, uint64_t log2a, bool verbose)
 {
     mpz_t tmp;
     mod_precompute_t *p = (mod_precompute_t *)cubic_allocate_function(sizeof(mod_precompute_t));
@@ -110,7 +118,7 @@ struct mod_precompute_t *mpz_mod_precompute(mpz_t n, bool verbose)
                 mpz_mul(tmp, p->a, p->a);
                 mpz_invert(p->inv, tmp, n);
                 p->n2 = s;
-		p->montg = true;
+                p->montg = true;
                 p->gmn = true;
                 p->special_case = true;
             }
@@ -119,9 +127,10 @@ struct mod_precompute_t *mpz_mod_precompute(mpz_t n, bool verbose)
 
     if (!p->special_case)
     {
-        // precompute a variant of Barrett reduction
+        // precompute a variant of Barrett reduction mod m = n*a, and avoid mid-limbs boundaries
         // b = 2^(3n/2) / n
         // a = 2^(3n/2) % n
+        p->n = round_up(p->n + log2a, 64);
         p->n2 = p->n >> 1;
         p->n32 = p->n + p->n2;
         mpz_set_ui(tmp, 1);
@@ -288,7 +297,7 @@ void mpz_mod_fast_reduce(mpz_t r, mpz_t tmp, struct mod_precompute_t *p)
             // p->x_hi * a + p->x_lo
             mpz_mod_2exp(p->x_lo, r, p->n32);
             mpz_mul(tmp, p->x_hi, p->a);
-            mpz_add(r, tmp, p->x_lo);
+            mpz_add(r, p->x_lo, tmp);
         }
 
         // reduce the number to approx n bits (Barrett reduction)
@@ -342,7 +351,7 @@ void mpz_mod_to_montg(mpz_t v, struct mod_precompute_t *p)
             mpz_mul_2exp(v, v, 2 * p->n2);
             mpz_mod(v, v, p->m);
         }
-	else if (p->gmn)
+        else if (p->gmn)
         {
             mpz_mul(v, v, p->inv);
             mpz_mod(v, v, p->m);
@@ -358,11 +367,19 @@ void mpz_mod_from_montg(mpz_t v, mpz_t tmp, struct mod_precompute_t *p)
     }
 }
 
-void mpz_mod_slow_reduce(mpz_t x, mpz_t m)
+void mpz_mod_slow_reduce(mpz_t x, struct mod_precompute_t *p)
 {
-    // subtract the modulus until underflow
-    while (mpz_cmp(x, m) >= 0)
+    if (!p->special_case)
     {
-        mpz_sub(x, x, m);
+        mpz_mod(x, x, p->m);
+    }
+    else
+    {
+        // subtract the modulus until underflow
+
+        while (mpz_cmp(x, p->m) >= 0)
+        {
+            mpz_sub(x, x, p->m);
+        }
     }
 }
