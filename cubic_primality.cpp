@@ -558,6 +558,7 @@ static void mpz_exponentiate(mpz_t s, mpz_t t, mpz_t u, mpz_t e, uint64_t a, mod
             mpz_add(t, tmp_t2, tu);
             mpz_add(u, u2, st);
         }
+        // numbers to reduce here are < 6 * a * O(input_numbers)^2
         mpz_mod_fast_reduce(s, tmp, p);
         mpz_mod_fast_reduce(t, tmp, p);
         mpz_mod_fast_reduce(u, tmp, p);
@@ -642,6 +643,7 @@ static bool uint64_cubic_primality(uint64_t n, bool verbose = false)
                 printf("Number is a small prime\n");
             return true; // small prime
         }
+
         if (k >= 5405)
         {
             // This constraint seems to be unreachable
@@ -649,6 +651,7 @@ static bool uint64_cubic_primality(uint64_t n, bool verbose = false)
             printf("internal overflow, k>5404, a >= 29208627, u > 2^64\n");
             exit(1);
         }
+
         uint64_t u = (2 * k - 1) * a * (2 * a - 1);
         uint64_t g = uint64_gcd(u, n);
         if (g == n)
@@ -669,7 +672,9 @@ static bool uint64_cubic_primality(uint64_t n, bool verbose = false)
         {
             // todo : composite for sure
             if (verbose)
+            {
                 printf("Composite for sure ? more loops k %lu a %lu n %lu\n", k, a, n);
+            }
             continue; // B == 1 try another a
         }
         break;
@@ -768,6 +773,7 @@ bool mpz_cubic_primality(mpz_t n, bool verbose, bool multithread)
             printf("internal overflow, k>5404, a >= 29208627, u > 2^64\n");
             exit(1);
         }
+
         uint64_t u = (2 * k - 1) * a * (2 * a - 1);
         uint64_t v = mpz_mod_ui(ignore, n, u);
         uint64_t g = uint64_gcd(u, v);
@@ -781,7 +787,7 @@ bool mpz_cubic_primality(mpz_t n, bool verbose, bool multithread)
         if (!pcpt)
         {
             uint64_t bits_a = 64 - __builtin_clzll(a); // rounded-up log2
-            pcpt = mpz_mod_precompute(n, 1 + bits_a, verbose);
+            pcpt = mpz_mod_precompute(n, bits_a, verbose);
         }
         mpz_set_ui(bs, 0);
         mpz_set_ui(bt, 1);
@@ -792,7 +798,9 @@ bool mpz_cubic_primality(mpz_t n, bool verbose, bool multithread)
         {
             // todo : composite for sure
             if (verbose)
+            {
                 gmp_printf("Composite ? more loops k %lu a %lu n %Zu\n", k, a, n);
+            }
             continue; // B == 1 try another a
         }
         break;
@@ -807,7 +815,7 @@ bool mpz_cubic_primality(mpz_t n, bool verbose, bool multithread)
     if (!pcpt)
     {
         uint64_t bits_a = 64 - __builtin_clzll(a); // rounded_up log2
-        pcpt = mpz_mod_precompute(n, 1 + bits_a, verbose);
+        pcpt = mpz_mod_precompute(n, bits_a, verbose);
     }
 
     mpz_exponentiate(bs2, bt2, bu2, e, a, pcpt);
