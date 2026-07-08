@@ -446,7 +446,7 @@ static uint64_t uint64_exponentiate_start(uint64_t &s, uint64_t &t, uint64_t &u,
         bit -= 2;
         switch (e >> bit)
         {
-        case 4: // a*x^2 + a*x 
+        case 4: // a*x^2 + a*x
             s = a;
             t = a;
             u = 0;
@@ -459,16 +459,16 @@ static uint64_t uint64_exponentiate_start(uint64_t &s, uint64_t &t, uint64_t &u,
         case 6: // a^2*x^2 + 2*a^2*x + a^2
             s = ((uint128_t)a * a) % n;
             t = 2 * s;
-	    t -= (t >= n) ? n : 0;
+            t -= (t >= n) ? n : 0;
             u = s;
             break;
         case 7: // 2*a^2*x^2 + (a^3 + a^2)*x + a^3
             s = ((uint128_t)a * a) % n;
             u = ((uint128_t)s * a) % n;
             t = s + u;
-	    t -= (t >= n) ? n : 0;
+            t -= (t >= n) ? n : 0;
             s *= 2;
-	    s -= (s >= n) ? n : 0;
+            s -= (s >= n) ? n : 0;
             break;
         }
     }
@@ -533,12 +533,195 @@ static void uint64_exponentiate(uint64_t &s, uint64_t &t, uint64_t &u, uint64_t 
     }
 }
 
+static unsigned mpz_exponentiate_start(mpz_t s, mpz_t t, mpz_t u, mpz_t e, uint64_t a, mod_precompute_t *p)
+{
+    unsigned bit = mpz_sizeinbase(e, 2) - 1;
+
+    if (bit >= 3)
+    {
+        mpz_t tmp;
+        mpz_init(tmp);
+        bit -= 3;
+        mpz_div_2exp(tmp, e, bit);
+        // get the top 3 bits from the exponent
+        uint64_t ue = mpz_get_ui(tmp);
+        // precomputations
+        // ? t = Mod(x, x^3 -a *x -a)
+        // ? t^8
+        // %3 = Mod((a^3 + a^2)*x^2 + 3*a^3*x + 2*a^3, x^3 - a*x - a)
+        // ? t^9
+        // %4 = Mod(3*a^3*x^2 + (a^4 + 3*a^3)*x + (a^4 + a^3), x^3 - a*x - a)
+        // ? t^10
+        // %5 = Mod((a^4 + 3*a^3)*x^2 + (4*a^4 + a^3)*x + 3*a^4, x^3 - a*x - a)
+        // ? t^11
+        // %6 = Mod((4*a^4 + a^3)*x^2 + (a^5 + 6*a^4)*x + (a^5 + 3*a^4), x^3 - a*x - a)
+        // ? t^12
+        // %7 = Mod((a^5 + 6*a^4)*x^2 + (5*a^5 + 4*a^4)*x + (4*a^5 + a^4), x^3 - a*x - a)
+        // ? t^13
+        // %8 = Mod((5*a^5 + 4*a^4)*x^2 + (a^6 + 10*a^5 + a^4)*x + (a^6 + 6*a^5), x^3 - a*x - a)
+        // ? t^14
+        // %9 = Mod((a^6 + 10*a^5 + a^4)*x^2 + (6*a^6 + 10*a^5)*x + (5*a^6 + 4*a^5), x^3 - a*x - a)
+        // ? t^15
+        // %10 = Mod((6*a^6 + 10*a^5)*x^2 + (a^7 + 15*a^6 + 5*a^5)*x + (a^7 + 10*a^6 + a^5), x^3 - a*x - a)
+        switch (ue)
+        {
+        case 8: {
+            mpz_t a2, a3;
+            mpz_inits(a2, a3, 0);
+            mpz_set_ui(a2, a);
+            mpz_mul_ui(a2, a2, a);
+            mpz_mul_ui(a3, a2, a);
+            mpz_add(s, a3, a2);   // a^2+a^3
+            mpz_mul_ui(t, a3, 3); // 3 * a^3
+            mpz_mul_ui(u, a3, 2); // 2 * a^3
+            mpz_clears(a2, a3, 0);
+        }
+        break;
+        case 9: {
+            mpz_t a2, a3, a4;
+            mpz_inits(a2, a3, a4, 0);
+            mpz_set_ui(a2, a);
+            mpz_mul_ui(a2, a2, a);
+            mpz_mul_ui(a3, a2, a);
+            mpz_mul(a4, a2, a2);
+            mpz_mul_ui(s, a3, 3); // 3*a^3
+            mpz_add(t, a4, s);    // a^4 + 3*a^3
+            mpz_add(u, a4, a3);   // a^4 + a^3
+            mpz_clears(a2, a3, a4, 0);
+        }
+        break;
+        case 10: {
+            mpz_t a3, a4;
+            mpz_inits(a3, a4, 0);
+            mpz_set_ui(a3, a);
+            mpz_mul_ui(a3, a3, a);
+            mpz_mul_ui(a3, a3, a);
+            mpz_mul_ui(a4, a3, a);
+            mpz_mul_ui(s, a3, 3);
+            mpz_add(s, s, a4); // a^4 + 3*a^3
+            mpz_mul_ui(t, a4, 4);
+            mpz_add(t, t, a3);    // 4*a^4 + a^3
+            mpz_mul_ui(u, a4, 3); // 3*a^4
+            mpz_clears(a3, a4, 0);
+        }
+        break;
+        case 11: {
+            mpz_t a3, a4, a5;
+            mpz_inits(a3, a4, a5, 0);
+            mpz_set_ui(a3, a);
+            mpz_mul_ui(a3, a3, a);
+            mpz_mul_ui(a3, a3, a);
+            mpz_mul_ui(a4, a3, a);
+            mpz_mul_ui(a5, a4, a);
+            mpz_mul_ui(s, a4, 4);
+            mpz_add(s, s, a3); // 4*a^4 + a^3
+            mpz_mul_ui(t, a4, 6);
+            mpz_add(t, t, a5); // 6*a^4 + a^5
+            mpz_mul_ui(u, a4, 3);
+            mpz_add(u, u, a5); // 3*a^4 + a^5
+            mpz_clears(a3, a4, a5, 0);
+        }
+        break;
+        case 12: {
+            mpz_t a4, a5;
+            mpz_inits(a4, a5, 0);
+            mpz_set_ui(a4, a);
+            mpz_mul_ui(a4, a4, a);
+            mpz_mul_ui(a4, a4, a);
+            mpz_mul_ui(a4, a4, a);
+            mpz_mul_ui(a5, a4, a);
+            mpz_mul_ui(s, a4, 6);
+            mpz_add(s, s, a5); // 6*a^4 + a^5
+            mpz_mul_ui(t, a4, 4);
+            mpz_mul_ui(u, a5, 5);
+            mpz_add(t, t, u); // 4*a^4 + 5*a^5
+            mpz_mul_ui(u, a5, 4);
+            mpz_add(u, u, a4); // 4*a^5 + a^4
+            mpz_clears(a4, a5, 0);
+        }
+        break;
+        case 13: {
+            mpz_t a4, a5, a6;
+            mpz_inits(a4, a5, a6, 0);
+            mpz_set_ui(a4, a);
+            mpz_mul_ui(a4, a4, a);
+            mpz_mul_ui(a4, a4, a);
+            mpz_mul_ui(a4, a4, a);
+            mpz_mul_ui(a5, a4, a);
+            mpz_mul_ui(a6, a5, a);
+            mpz_mul_ui(s, a4, 4);
+            mpz_mul_ui(t, a5, 5);
+            mpz_add(s, s, t); // 4*a^4 + 5*a^5
+            mpz_mul_ui(t, a5, 10);
+            mpz_add(u, a4, a6);
+            mpz_add(t, t, u); // a^4 + 10*a^5 + a^6
+            mpz_mul_ui(u, a5, 6);
+            mpz_add(u, u, a6); // 6*a^5 + a^6
+            mpz_clears(a4, a5, a6, 0);
+        }
+        break;
+        case 14: {
+            mpz_t a4, a5, a6;
+            mpz_inits(a4, a5, a6, 0);
+            mpz_set_ui(a4, a);
+            mpz_mul_ui(a4, a4, a);
+            mpz_mul_ui(a4, a4, a);
+            mpz_mul_ui(a4, a4, a);
+            mpz_mul_ui(a5, a4, a);
+            mpz_mul_ui(a6, a5, a);
+            mpz_mul_ui(t, a5, 10);
+            mpz_add(s, a6, a4);
+            mpz_add(s, s, t); // a^6 + 10*a^5 + a^4)
+            mpz_mul_ui(u, a6, 6);
+            mpz_add(t, t, u); // 6*a^6 + 10*a^5
+            mpz_mul_ui(u, a6, 5);
+            mpz_mul_ui(a4, a5, 4);
+            mpz_add(u, u, a4); // 5*a^6 + 4*a^5)
+            mpz_clears(a4, a5, a6, 0);
+        }
+        break;
+        case 15: {
+            mpz_t a5, a6, a7;
+            mpz_inits(a5, a6, a7, 0);
+            mpz_set_ui(a5, a);
+            mpz_mul_ui(a5, a5, a); // a^2
+            mpz_mul_ui(a6, a5, a); // a^3
+            mpz_mul(a5, a5, a6);   // a^5 = a^2 * a^3
+            mpz_mul_ui(a6, a5, a);
+            mpz_mul_ui(a7, a6, a);
+            mpz_mul_ui(t, a5, 10);
+            mpz_mul_ui(s, a6, 6);
+            mpz_add(s, s, t); // 6*a^6 + 10*a^5
+            mpz_mul_ui(t, a6, 15);
+            mpz_mul_ui(u, a5, 5);
+            mpz_add(t, t, u);
+            mpz_add(t, t, a7); // a^7 + 15*a^6 + 5*a^5
+            mpz_mul_ui(u, a6, 10);
+            mpz_add(a5, a5, a7);
+            mpz_add(u, u, a5); // a^7 + 10*a^6 + a^5
+            mpz_clears(a5, a6, a7, 0);
+        }
+        break;
+        }
+        mpz_mod(s, s, p->m);
+        mpz_mod(t, t, p->m);
+        mpz_mod(u, u, p->m);
+    }
+    else
+    {
+        mpz_set_ui(s, 0);
+        mpz_set_ui(t, 1);
+        mpz_set_ui(u, 0);
+    }
+    return bit;
+}
+
 // Iterate a third order linear recurrence using "double and add" steps
 // Computes (s,t,u)^e mod (n, x^3-ax-a)
 // Makes output s,t,u < n
-static void mpz_exponentiate(mpz_t s, mpz_t t, mpz_t u, mpz_t e, uint64_t a, mod_precompute_t *p)
+static void mpz_exponentiate(mpz_t s, mpz_t t, mpz_t u, mpz_t e, uint64_t a, mod_precompute_t *p, bool first)
 {
-    unsigned bit = mpz_sizeinbase(e, 2) - 1;
+    unsigned bit;
     unsigned new_size = (p->n + 256) * 2;
     mpz_t s2, t2, u2, st, tu, us, tmp, tmp_s2, tmp_t2, tmp_u2;
     mpz_init2(tmp, new_size);
@@ -552,6 +735,15 @@ static void mpz_exponentiate(mpz_t s, mpz_t t, mpz_t u, mpz_t e, uint64_t a, mod
     mpz_init2(st, new_size);
     mpz_init2(tu, new_size);
 
+    if (first)
+    {
+        bit = mpz_exponentiate_start(s, t, u, e, a, p);
+    }
+    else
+    {
+        bit = mpz_sizeinbase(e, 2) - 1;
+    }
+
     mpz_mod_to_montg(s, p);
     mpz_mod_to_montg(t, p);
     mpz_mod_to_montg(u, p);
@@ -559,8 +751,6 @@ static void mpz_exponentiate(mpz_t s, mpz_t t, mpz_t u, mpz_t e, uint64_t a, mod
     while (bit--)
     {
         // Double
-#if 1
-        // fast sequence  (square only)
         mpz_mul(s2, s, s);
         mpz_mul(t2, t, t);
         mpz_mul(u2, u, u);
@@ -578,23 +768,9 @@ static void mpz_exponentiate(mpz_t s, mpz_t t, mpz_t u, mpz_t e, uint64_t a, mod
         mpz_add(us, us, s2);
         mpz_mul_ui(s2, s2, a);
         mpz_mul_ui(st, st, a);
-#else
-        // slow sequence  (half squares, half multiplies)
-        mpz_mul(s2, s, s);
-        mpz_mul_ui(s2, s2, a);
-        mpz_mul(t2, t, t);
-        mpz_mul(u2, u, u);
-        mpz_mul(st, s, t);
-        mpz_mul_ui(st, st, a);
-        mpz_mul(tu, t, u);
-        mpz_mul(us, u, s);
-        mpz_mul_2exp(st, st, 1);
-        mpz_mul_2exp(tu, tu, 1);
-        mpz_mul_2exp(us, us, 1);
-#endif
         if (mpz_tstbit(e, bit))
         {
-            // add
+            // Add
             mpz_add(tmp_u2, us, t2);
             mpz_add(u, tmp_u2, s2);
             mpz_mul_ui(u, u, a);
@@ -839,11 +1015,8 @@ bool mpz_cubic_primality(mpz_t n, bool verbose, bool multithread)
             uint64_t bits_a = 64 - __builtin_clzll(a); // rounded-up log2
             pcpt = mpz_mod_precompute(n, bits_a, verbose);
         }
-        mpz_set_ui(bs, 0);
-        mpz_set_ui(bt, 1);
-        mpz_set_ui(bu, 0);
         mpz_sub_ui(e, n, 1);
-        mpz_exponentiate(bs, bt, bu, e, a, pcpt);
+        mpz_exponentiate(bs, bt, bu, e, a, pcpt, true);
         if (mpz_sgn(bs) == 0 && mpz_sgn(bt) == 0 && mpz_cmp_ui(bu, 1) == 0)
         {
             // todo : composite for sure
@@ -868,7 +1041,7 @@ bool mpz_cubic_primality(mpz_t n, bool verbose, bool multithread)
         pcpt = mpz_mod_precompute(n, bits_a, verbose);
     }
 
-    mpz_exponentiate(bs2, bt2, bu2, e, a, pcpt);
+    mpz_exponentiate(bs2, bt2, bu2, e, a, pcpt, false);
     // check the final condition (B^2 + B + 1) == (-1, 1, a)
     mpz_add_ui(bs2, bs2, 1);
     mpz_mod_add(bs2, bs2, bs, pcpt);
