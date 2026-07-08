@@ -436,16 +436,69 @@ static sieve_t mpz_composite_sieve(mpz_t n)
     return UNDECIDED; // might be prime
 }
 
+static uint64_t uint64_exponentiate_start(uint64_t &s, uint64_t &t, uint64_t &u, uint64_t &e, uint64_t n, uint64_t a)
+{
+    unsigned bit = 63 - __builtin_clzll(e);
+
+    if (bit >= 2)
+    {
+        // Unroll the 2 first bits of exponentiation
+        bit -= 2;
+        switch (e >> bit)
+        {
+        case 4: // a*x^2 + a*x 
+            s = a;
+            t = a;
+            u = 0;
+            break;
+        case 5: // a*x^2 + a^2*x + a^2
+            s = a;
+            t = ((uint128_t)a * a) % n;
+            u = t;
+            break;
+        case 6: // a^2*x^2 + 2*a^2*x + a^2
+            s = ((uint128_t)a * a) % n;
+            t = 2 * s;
+	    t -= (t >= n) ? n : 0;
+            u = s;
+            break;
+        case 7: // 2*a^2*x^2 + (a^3 + a^2)*x + a^3
+            s = ((uint128_t)a * a) % n;
+            u = ((uint128_t)s * a) % n;
+            t = s + u;
+	    t -= (t >= n) ? n : 0;
+            s *= 2;
+	    s -= (s >= n) ? n : 0;
+            break;
+        }
+    }
+    else
+    {
+        s = 0;
+        t = 1;
+        u = 0;
+    }
+    return bit;
+}
+
 // Iterate a third order linear recurrence using "double and add" steps
 // Computes (s,t,u)^e mod (n, x^3 -a*x -a)
 // Assume input s,t,u,a < n < 2^61
 // Make output s,t,u < n < 2^61
-static void uint64_exponentiate(uint64_t &s, uint64_t &t, uint64_t &u, uint64_t e, uint64_t n, uint64_t a)
+static void uint64_exponentiate(uint64_t &s, uint64_t &t, uint64_t &u, uint64_t e, uint64_t n, uint64_t a, bool first)
 {
-    unsigned bit = 63 - __builtin_clzll(e);
     uint128_t s2, t2, u2, st, tu, us, uu, ss, tt;
     uint64_t tmp;
+    unsigned bit;
 
+    if (first)
+    {
+        bit = uint64_exponentiate_start(s, t, u, e, n, a);
+    }
+    else
+    {
+        bit = 63 - __builtin_clzll(e);
+    }
     while (bit--)
     {
         // Double
@@ -664,10 +717,7 @@ static bool uint64_cubic_primality(uint64_t n, bool verbose = false)
                 printf("Number has a small factor\n");
             return false; //  composite
         }
-        bs = 0;
-        bt = 1;
-        bu = 0;
-        uint64_exponentiate(bs, bt, bu, n - 1, n, a);
+        uint64_exponentiate(bs, bt, bu, n - 1, n, a, true);
         if (bs == 0 && bt == 0 && bu == 1)
         {
             // todo : composite for sure
@@ -682,7 +732,7 @@ static bool uint64_cubic_primality(uint64_t n, bool verbose = false)
 
     // Now B = (0,1,0)^(n-1), compute B^2 as (bs2, bt2, bu2) = (bs, bt, bu)^2
     uint64_t bs2 = bs, bt2 = bt, bu2 = bu;
-    uint64_exponentiate(bs2, bt2, bu2, 2, n, a);
+    uint64_exponentiate(bs2, bt2, bu2, 2, n, a, false);
     // check the final condition (B^2 + B + 1) == (-1, 1, a)
     bs = (bs + bs2) % n;
     bt = (bt + bt2) % n;
@@ -854,279 +904,360 @@ done2:
 
 void cubic_primality_self_test(void)
 {
-    uint64_t a, b, c, m;
-
     // ---------------------------------------------------------------------------------
-    printf("Gcd ...\n");
-    a = 12;
-    b = 15;
-    c = uint64_gcd(a, b);
-    assert(c == 3);
-
-    a = 120;
-    b = 150;
-    c = uint64_gcd(a, b);
-    assert(c == 30);
-
-    // ---------------------------------------------------------------------------------
-    printf("Modexp ...\n");
-    m = 101;
-    a = 200;
-    b = 300;
-    c = uint64_powm(a, b, m);
-    assert(c == 1);
-
-    m = 101;
-    a = 201;
-    b = 301;
-    c = uint64_powm(a, b, m);
-    assert(c == 100);
-
-    // ---------------------------------------------------------------------------------
-    printf("Perfect cube ...\n");
-    mpz_t ma, mb, tmp;
-    bool mc;
-    mpz_init_set_ui(tmp, 1);
-    mpz_init_set_ui(mb, 1);
-    mpz_init_set_ui(ma, 1);
-    mpz_mul_2exp(ma, ma, 11213);
-    mpz_sub_ui(ma, ma, 1);
-    mpz_mul(mb, mb, ma);
-    mpz_mul(mb, mb, ma);
-    mpz_mul(mb, mb, ma);
-    mc = mpz_perfect_cube(mb);
-    assert(mc == true);
-    mpz_sub_ui(mb, mb, 1);
-    mc = mpz_perfect_cube(mb);
-    assert(mc == false);
-
-    // ---------------------------------------------------------------------------------
-    printf("Fast reduction mod 2^b-1 ...\n");
-    mpz_set_ui(ma, 11);
-    for (unsigned b = 1; b < 10; b++)
+    if (1)
     {
-        mpz_mul(ma, ma, ma);
-    }
-    for (unsigned b = 1; b < 64; b++)
-    {
-        uint64_t mm = (1ull << b) - 1;
-        uint64_t r = mpz_mod_mersenne(ma, b);
-        assert(r % mm == mpz_mod_ui(mb, ma, mm));
+        uint64_t a, b, c, m;
+
+        // ---------------------------------------------------------------------------------
+        printf("Gcd ...\n");
+        a = 12;
+        b = 15;
+        c = uint64_gcd(a, b);
+        assert(c == 3);
+
+        a = 120;
+        b = 150;
+        c = uint64_gcd(a, b);
+        assert(c == 30);
+
+        // ---------------------------------------------------------------------------------
+        printf("Modexp ...\n");
+        m = 101;
+        a = 200;
+        b = 300;
+        c = uint64_powm(a, b, m);
+        assert(c == 1);
+
+        m = 101;
+        a = 201;
+        b = 301;
+        c = uint64_powm(a, b, m);
+        assert(c == 100);
     }
 
     // ---------------------------------------------------------------------------------
-    printf("Sieve ...\n");
-    assert(uint64_composite_sieve(101) == PRIME_FOR_SURE);
-    assert(uint64_composite_sieve(1661) == COMPOSITE_FOR_SURE);
-    assert(uint64_composite_sieve(281474976710677ull) == UNDECIDED);
-
-    // 2^127 - 1 (a prime)
-    mpz_init_set_ui(ma, 1);
-    mpz_mul_2exp(ma, ma, 127);
-    mpz_sub_ui(ma, ma, 1);
-    assert(mpz_composite_sieve(ma) == UNDECIDED);
-    // 2^127 + 1
-    mpz_add_ui(ma, ma, 2);
-    assert(mpz_composite_sieve(ma) == COMPOSITE_FOR_SURE);
-
-    // ---------------------------------------------------------------------------------
-    printf("Slow modular reduction\n");
-    mpz_t x;
-    mpz_init(x);
-    mpz_set_ui(ma, 0x1);
-    mpz_mul_2exp(ma, ma, 127);
-    mpz_add_ui(ma, ma, 0x1d);
-    // verify 2*(modulus +1) == 2
-    mod_precompute_t *p = mpz_mod_precompute(ma);
-    mpz_add_ui(mb, ma, 0x1);
-    mpz_mod_add(x, mb, mb, p);
-    assert(mpz_cmp_ui(x, 2) == 0);
-    mpz_mod_slow_reduce(x, p);
-    assert(mpz_cmp_ui(x, 2) == 0);
-    // clears temp structure
-    mpz_mod_uncompute(p);
-
-    // ---------------------------------------------------------------------------------
-    printf("Fast modular reduction\n");
-    // verify generic modulus
-    mpz_set_ui(ma, 0x1cc);
-    p = mpz_mod_precompute(ma);
-    assert(p->special_case == false);
-    mpz_set_ui(mb, 0x2000ull * 0x1cc);
-    mpz_mod_fast_reduce(mb, tmp, p);
-    mpz_mod_slow_reduce(mb, p);
-    assert(mpz_get_ui(mb) == 0);
-    // clears temp structure
-    mpz_mod_uncompute(p);
-
-    // verify proth modulus
-    mpz_t mx;
-    mpz_init(mx);
-    mpz_set_ui(ma, 0xcdefabcdcdefabcdull);
-    mpz_mul_2exp(ma, ma, 64);
-    mpz_add_ui(ma, ma, 1);
-    p = mpz_mod_precompute(ma);
-    assert(p->special_case == true);
-    assert(p->montg == true);
-    assert(p->proth == true);
-    assert(p->n2 == 64);
-    assert(p->n == 128);
-    mpz_set_ui(ma, 0xabcdef01abcdef01ull);
-    mpz_mul(ma, ma, ma);
-    mpz_set_ui(mb, 0x1234567812345678ull);
-    mpz_mul(mb, mb, mb);
-    mpz_mul(x, ma, mb);
-    mpz_mod(x, x, p->m);
-    mpz_mod_to_montg(ma, p);
-    mpz_mod_to_montg(mb, p);
-    mpz_mul(mx, ma, mb);
-    mpz_mod_fast_reduce(mx, tmp, p);
-    mpz_mod_from_montg(mx, tmp, p);
-    assert(mpz_cmp(x, mx) == 0);
-    // clears temp structure
-    mpz_clear(mx);
-    mpz_mod_uncompute(p);
-
-    // verify (modulus + 0x17)^2 == 17*17
-    mpz_set_ui(ma, 1);
-    mpz_mul_2exp(ma, ma, 127);
-    p = mpz_mod_precompute(ma);
-    assert(p->special_case == false);
-    mpz_add_ui(mb, ma, 17);
-    mpz_mul(x, mb, mb);
-    mpz_mod_fast_reduce(x, tmp, p);
-    mpz_mod_slow_reduce(x, p);
-    assert(mpz_get_ui(x) == 17 * 17);
-
-    // verify (modulus + 0x19)^4 == 17*17*17*17
-    mpz_add_ui(mb, ma, 19);
-    mpz_mul(x, mb, mb);
-    mpz_mul(x, x, x);
-    mpz_mod_fast_reduce(x, tmp, p);
-    mpz_mod_slow_reduce(x, p);
-    assert(mpz_get_ui(x) == 19 * 19 * 19 * 19);
-
-    // clears temp structure
-    mpz_mod_uncompute(p);
-    p = 0;
-    mpz_clear(x);
-
-    // ---------------------------------------------------------------------------------
-    printf("Small primes (uint64)\n");
-    assert(uint64_cubic_primality(16777259ull) == true);
-    assert(uint64_cubic_primality(281474976710677ull) == true);
-
-    // ---------------------------------------------------------------------------------
-    printf("Small composites (uint64)\n");
-    assert(uint64_cubic_primality(16777265ull) == false);
-    assert(uint64_cubic_primality(281474976710683ull) == false);
-
-    // ---------------------------------------------------------------------------------
-    uint32_t smallq[] = {
-        1,   1,   1,   3,   1,   5,   3,   3,   1,  9,   7,   5,   3,   17,  27,  3,   1,   29,  3,   21,  7,   17,
-        15,  9,   43,  35,  15,  29,  3,   11,  3,  11,  15,  17,  25,  53,  31,  9,   7,   23,  15,  27,  15,  29,
-        7,   59,  15,  5,   21,  69,  55,  21,  21, 5,   159, 3,   81,  9,   69,  131, 33,  15,  135, 29,  13,  131,
-        9,   3,   33,  29,  25,  11,  15,  29,  37, 33,  15,  11,  7,   23,  13,  17,  9,   75,  3,   171, 27,  39,
-        7,   29,  133, 59,  25,  105, 129, 9,   61, 105, 7,   255, 277, 81,  267, 81,  111, 39,  99,  39,  33,  147,
-        27,  51,  25,  281, 43,  71,  33,  29,  25, 9,   451, 41,  277, 165, 67,  27,  7,   29,  51,  17,  169, 39,
-        67,  27,  27,  33,  85,  155, 87,  155, 37, 5,   217, 5,   175, 27,  85,  51,  91,  69,  147, 45,  253, 95,
-        27,  15,  45,  69,  97,  299, 7,   107, 19, 21,  117, 141, 85,  83,  87,  147, 49,  129, 105, 77,  7,   9,
-        427, 75,  87,  309, 15,  165, 49,  215, 27, 159, 205, 303, 57,  35,  129, 5,   133, 65,  27,  35,  21,  107,
-        15,  101, 235, 351, 67,  15,  7,   581, 33, 203, 375, 47,  33,  71,  57,  75,  7,   251, 423, 129, 163, 185,
-        217, 81,  49,  189, 735, 119, 735, 483, 3,  249, 67,  105, 357, 431, 43,  81,  25,  249, 67,  29,  115, 261,
-        69,  59,  133, 315, 337, 63,  81,  119, 25, 65,  421, 39,  79,  95,  297, 155, 73,  435, 223, 0};
-
-    printf("Medium primes (mpz)\n");
-    for (int j = 0; smallq[j]; j++)
+    if (1)
     {
-        // primes (2^j + q) must be catched
+        printf("Perfect cube ...\n");
+        mpz_t ma, mb, tmp;
+        bool mc;
+        mpz_init_set_ui(tmp, 1);
+        mpz_init_set_ui(mb, 1);
         mpz_init_set_ui(ma, 1);
-        mpz_mul_2exp(ma, ma, j);
-        mpz_add_ui(ma, ma, smallq[j]);
-        bool res = mpz_cubic_primality(ma);
-        if (!res)
-        {
-            printf("%d %d\n", (int)j, (int)smallq[j]);
-            assert(res == true);
-        }
+        mpz_mul_2exp(ma, ma, 11213);
+        mpz_sub_ui(ma, ma, 1);
+        mpz_mul(mb, mb, ma);
+        mpz_mul(mb, mb, ma);
+        mpz_mul(mb, mb, ma);
+        mc = mpz_perfect_cube(mb);
+        assert(mc == true);
+        mpz_sub_ui(mb, mb, 1);
+        mc = mpz_perfect_cube(mb);
+        assert(mc == false);
+        mpz_clears(ma, mb, tmp, 0);
     }
 
     // ---------------------------------------------------------------------------------
-    uint32_t smallp[] = {2,  3,  5,  7,  11, 13, 17, 19, 23, 29, 31, 37,  41,  43,
-                         47, 53, 59, 61, 67, 71, 73, 79, 83, 89, 97, 101, 103, 0};
-    printf("Medium composites (mpz)\n");
-    for (int j = 0; smallp[j]; j++)
+    if (1)
     {
-        // Composites p * (2^127-1) must be catched
+        printf("Fast reduction mod 2^b-1 ...\n");
+        mpz_t ma, tmp;
+        mpz_init(tmp);
+        mpz_init_set_ui(ma, 11);
+        for (unsigned b = 1; b < 10; b++)
+        {
+            mpz_mul(ma, ma, ma);
+        }
+        for (unsigned b = 1; b < 64; b++)
+        {
+            uint64_t mm = (1ull << b) - 1;
+            uint64_t r = mpz_mod_mersenne(ma, b);
+            assert(r % mm == mpz_mod_ui(tmp, ma, mm));
+        }
+        mpz_clears(ma, tmp, 0);
+    }
+
+    // ---------------------------------------------------------------------------------
+    if (1)
+    {
+        printf("Sieve ...\n");
+        mpz_t ma;
+        assert(uint64_composite_sieve(101) == PRIME_FOR_SURE);
+        assert(uint64_composite_sieve(1661) == COMPOSITE_FOR_SURE);
+        assert(uint64_composite_sieve(281474976710677ull) == UNDECIDED);
+
+        // 2^127 - 1 (a prime)
         mpz_init_set_ui(ma, 1);
         mpz_mul_2exp(ma, ma, 127);
         mpz_sub_ui(ma, ma, 1);
-        mpz_mul_ui(ma, ma, smallp[j]);
-        bool res = mpz_cubic_primality(ma);
-        if (res)
-        {
-            printf("%d %d\n", (int)j, (int)smallp[j]);
-            assert(res == false);
-        }
+        assert(mpz_composite_sieve(ma) == UNDECIDED);
+        // 2^127 + 1
+        mpz_add_ui(ma, ma, 2);
+        assert(mpz_composite_sieve(ma) == COMPOSITE_FOR_SURE);
+        mpz_clear(ma);
     }
 
     // ---------------------------------------------------------------------------------
-    printf("Large primes (mpz)\n");
+    if (1)
+    {
+        printf("Slow modular reduction\n");
+        mpz_t x, ma, mb, tmp;
+        mpz_inits(x, ma, mb, tmp, 0);
+        mpz_set_ui(ma, 0x1);
+        mpz_mul_2exp(ma, ma, 127);
+        mpz_add_ui(ma, ma, 0x1d);
+        // verify 2*(modulus +1) == 2
+        mod_precompute_t *p = mpz_mod_precompute(ma);
+        mpz_add_ui(mb, ma, 0x1);
+        mpz_mod_add(x, mb, mb, p);
+        assert(mpz_cmp_ui(x, 2) == 0);
+        mpz_mod_slow_reduce(x, p);
+        assert(mpz_cmp_ui(x, 2) == 0);
+        // clears temp structure
+        mpz_mod_uncompute(p);
 
-    // large proth prime 333*2^448+1
-    mpz_set_ui(ma, 333);
-    mpz_mul_2exp(ma, ma, 448);
-    mpz_add_ui(ma, ma, 1);
-    assert(mpz_cubic_primality(ma) == true);
+        // ---------------------------------------------------------------------------------
+        printf("Fast modular reduction\n");
+        // verify generic modulus
+        mpz_set_ui(ma, 0x1cc);
+        p = mpz_mod_precompute(ma);
+        assert(p->special_case == false);
+        mpz_set_ui(mb, 0x2000ull * 0x1cc);
+        mpz_mod_fast_reduce(mb, tmp, p);
+        mpz_mod_slow_reduce(mb, p);
+        assert(mpz_get_ui(mb) == 0);
+        // clears temp structure
+        mpz_mod_uncompute(p);
 
-    // Large Riesel prime 100000000000037*2^5982-1
-    mpz_set_ui(ma, 1);
-    mpz_mul_2exp(ma, ma, 5982);
-    mpz_mul_ui(ma, ma, 100000000000037ul);
-    mpz_sub_ui(ma, ma, 1ul);
-    assert(mpz_cubic_primality(ma) == true);
+        // verify proth modulus
+        mpz_t mx;
+        mpz_init(mx);
+        mpz_set_ui(ma, 0xcdefabcdcdefabcdull);
+        mpz_mul_2exp(ma, ma, 64);
+        mpz_add_ui(ma, ma, 1);
+        p = mpz_mod_precompute(ma);
+        assert(p->special_case == true);
+        assert(p->montg == true);
+        assert(p->proth == true);
+        assert(p->n2 == 64);
+        assert(p->n == 128);
+        mpz_set_ui(ma, 0xabcdef01abcdef01ull);
+        mpz_mul(ma, ma, ma);
+        mpz_set_ui(mb, 0x1234567812345678ull);
+        mpz_mul(mb, mb, mb);
+        mpz_mul(x, ma, mb);
+        mpz_mod(x, x, p->m);
+        mpz_mod_to_montg(ma, p);
+        mpz_mod_to_montg(mb, p);
+        mpz_mul(mx, ma, mb);
+        mpz_mod_fast_reduce(mx, tmp, p);
+        mpz_mod_from_montg(mx, tmp, p);
+        assert(mpz_cmp(x, mx) == 0);
+        // clears temp structure
+        mpz_clear(mx);
+        mpz_mod_uncompute(p);
 
-    // 11111...6442446...11111 (1001-digits) The smallest zeroless titanic palindromic prime
-    // https://t5k.org/curios/page.php?number_id=3797
-    char titanic[1002];
-    memset(titanic, '1', 1001);
-    titanic[497] = '6';
-    titanic[498] = '4';
-    titanic[499] = '4';
-    titanic[500] = '2';
-    titanic[501] = '4';
-    titanic[502] = '4';
-    titanic[503] = '6';
-    titanic[1001] = 0;
-    mpz_set_str(ma, titanic, 10);
-    // gmp_printf("%Zd\n", ma);
-    assert(mpz_cubic_primality(ma) == true);
+        // verify (modulus + 0x17)^2 == 17*17
+        mpz_set_ui(ma, 1);
+        mpz_mul_2exp(ma, ma, 127);
+        p = mpz_mod_precompute(ma);
+        assert(p->special_case == false);
+        mpz_add_ui(mb, ma, 17);
+        mpz_mul(x, mb, mb);
+        mpz_mod_fast_reduce(x, tmp, p);
+        mpz_mod_slow_reduce(x, p);
+        assert(mpz_get_ui(x) == 17 * 17);
 
-    // 11111...0...3781 (1001-digits) The smallest Cyclops titanic prime.
-    // https://t5k.org/curios/page.php?number_id=18967
-    memset(titanic, '1', 1001);
-    titanic[500] = '0';
-    titanic[997] = '3';
-    titanic[998] = '7';
-    titanic[999] = '8';
-    titanic[1000] = '1';
-    titanic[1001] = 0;
-    mpz_set_str(mb, titanic, 10);
-    assert(mpz_cubic_primality(mb) == true);
+        // verify (modulus + 0x19)^4 == 17*17*17*17
+        mpz_add_ui(mb, ma, 19);
+        mpz_mul(x, mb, mb);
+        mpz_mul(x, x, x);
+        mpz_mod_fast_reduce(x, tmp, p);
+        mpz_mod_slow_reduce(x, p);
+        assert(mpz_get_ui(x) == 19 * 19 * 19 * 19);
+
+        // clears temp structure
+        mpz_mod_uncompute(p);
+        p = 0;
+        mpz_clears(x, ma, mb, tmp, 0);
+    }
 
     // ---------------------------------------------------------------------------------
-    printf("Large composites (mpz)\n");
-    // a semiprime out of the 2 previous tests, no small factors.
-    mpz_mul(ma, mb, ma);
-    assert(mpz_cubic_primality(ma) == false);
+    if (1)
+    {
+        printf("Cubic inner loop (uint64)\n");
+        uint64_t s, t, u, e, n, a;
+        n = 101;
+        a = 3;
+        e = 4;
+        uint64_exponentiate(s, t, u, e, n, a, true);
+        assert(s % n == a);
+        assert(t % n == a);
+        assert(u % n == 0);
+        s = 0;
+        t = 1;
+        u = 0;
+        n = 101;
+        a = 3;
+        e = 4;
+        uint64_exponentiate(s, t, u, e, n, a, false);
+        assert(s % n == a);
+        assert(t % n == a);
+        assert(u % n == 0);
+        s = 0;
+        t = 1;
+        u = 0;
+        n = 521;
+        a = 37;
+        e = 0x1a5;
+        uint64_exponentiate(s, t, u, e, n, a, false);
+        uint64_t bs, bt, bu;
+        uint64_exponentiate(bs, bt, bu, e, n, a, true);
+        assert(s == bs);
+        assert(t == bt);
+        assert(u == bu);
+    }
 
-    // a large square
-    mpz_mul(ma, mb, mb);
-    assert(mpz_cubic_primality(ma) == false);
+    // ---------------------------------------------------------------------------------
+    if (1)
+    {
+        printf("Small primes (uint64)\n");
+        assert(uint64_cubic_primality(16777259ull) == true);
+        assert(uint64_cubic_primality(281474976710677ull) == true);
 
-    // a large cube
-    mpz_mul(ma, ma, mb);
-    assert(mpz_cubic_primality(ma) == false);
+        // ---------------------------------------------------------------------------------
+        printf("Small composites (uint64)\n");
+        assert(uint64_cubic_primality(16777265ull) == false);
+        assert(uint64_cubic_primality(281474976710683ull) == false);
+    }
 
-    mpz_clears(ma, mb, 0);
+    // ---------------------------------------------------------------------------------
+    if (1)
+    {
+        // minimum values of q where 2^j+q is prime
+        uint32_t smallq[] = {
+            1,   1,   1,   3,   1,   5,   3,   3,   1,  9,   7,   5,   3,   17,  27,  3,   1,   29,  3,   21,  7,   17,
+            15,  9,   43,  35,  15,  29,  3,   11,  3,  11,  15,  17,  25,  53,  31,  9,   7,   23,  15,  27,  15,  29,
+            7,   59,  15,  5,   21,  69,  55,  21,  21, 5,   159, 3,   81,  9,   69,  131, 33,  15,  135, 29,  13,  131,
+            9,   3,   33,  29,  25,  11,  15,  29,  37, 33,  15,  11,  7,   23,  13,  17,  9,   75,  3,   171, 27,  39,
+            7,   29,  133, 59,  25,  105, 129, 9,   61, 105, 7,   255, 277, 81,  267, 81,  111, 39,  99,  39,  33,  147,
+            27,  51,  25,  281, 43,  71,  33,  29,  25, 9,   451, 41,  277, 165, 67,  27,  7,   29,  51,  17,  169, 39,
+            67,  27,  27,  33,  85,  155, 87,  155, 37, 5,   217, 5,   175, 27,  85,  51,  91,  69,  147, 45,  253, 95,
+            27,  15,  45,  69,  97,  299, 7,   107, 19, 21,  117, 141, 85,  83,  87,  147, 49,  129, 105, 77,  7,   9,
+            427, 75,  87,  309, 15,  165, 49,  215, 27, 159, 205, 303, 57,  35,  129, 5,   133, 65,  27,  35,  21,  107,
+            15,  101, 235, 351, 67,  15,  7,   581, 33, 203, 375, 47,  33,  71,  57,  75,  7,   251, 423, 129, 163, 185,
+            217, 81,  49,  189, 735, 119, 735, 483, 3,  249, 67,  105, 357, 431, 43,  81,  25,  249, 67,  29,  115, 261,
+            69,  59,  133, 315, 337, 63,  81,  119, 25, 65,  421, 39,  79,  95,  297, 155, 73,  435, 223, 0};
+
+        printf("Medium primes (mpz)\n");
+        mpz_t ma, mb;
+        mpz_inits(ma, mb, 0);
+
+        for (int j = 0; smallq[j]; j++)
+        {
+            // primes (2^j + q) must be catched
+            mpz_init_set_ui(ma, 1);
+            mpz_mul_2exp(ma, ma, j);
+            mpz_add_ui(ma, ma, smallq[j]);
+            bool res = mpz_cubic_primality(ma);
+            if (!res)
+            {
+                printf("%d %d\n", (int)j, (int)smallq[j]);
+                assert(res == true);
+            }
+        }
+        mpz_clears(ma, mb, 0);
+    }
+
+    // ---------------------------------------------------------------------------------
+    if (1)
+    {
+        uint32_t smallp[] = {2,  3,  5,  7,  11, 13, 17, 19, 23, 29, 31, 37,  41,  43,
+                             47, 53, 59, 61, 67, 71, 73, 79, 83, 89, 97, 101, 103, 0};
+        printf("Medium composites (mpz)\n");
+        mpz_t ma, mb;
+        mpz_inits(ma, mb, 0);
+
+        for (int j = 0; smallp[j]; j++)
+        {
+            // Composites p * (2^127-1) must be catched
+            mpz_init_set_ui(ma, 1);
+            mpz_mul_2exp(ma, ma, 127);
+            mpz_sub_ui(ma, ma, 1);
+            mpz_mul_ui(ma, ma, smallp[j]);
+            bool res = mpz_cubic_primality(ma);
+            if (res)
+            {
+                printf("%d %d\n", (int)j, (int)smallp[j]);
+                assert(res == false);
+            }
+        }
+        mpz_clears(ma, mb, 0);
+    }
+
+    // ---------------------------------------------------------------------------------
+    if (1)
+    {
+        printf("Large primes (mpz)\n");
+        mpz_t ma, mb;
+        mpz_inits(ma, mb, 0);
+
+        // large proth prime 333*2^448+1
+        mpz_set_ui(ma, 333);
+        mpz_mul_2exp(ma, ma, 448);
+        mpz_add_ui(ma, ma, 1);
+        assert(mpz_cubic_primality(ma) == true);
+
+        // Large Riesel prime 100000000000037*2^5982-1
+        mpz_set_ui(ma, 1);
+        mpz_mul_2exp(ma, ma, 5982);
+        mpz_mul_ui(ma, ma, 100000000000037ul);
+        mpz_sub_ui(ma, ma, 1ul);
+        assert(mpz_cubic_primality(ma) == true);
+
+        // 11111...6442446...11111 (1001-digits) The smallest zeroless titanic palindromic prime
+        // https://t5k.org/curios/page.php?number_id=3797
+        char titanic[1002];
+        memset(titanic, '1', 1001);
+        titanic[497] = '6';
+        titanic[498] = '4';
+        titanic[499] = '4';
+        titanic[500] = '2';
+        titanic[501] = '4';
+        titanic[502] = '4';
+        titanic[503] = '6';
+        titanic[1001] = 0;
+        mpz_set_str(ma, titanic, 10);
+        // gmp_printf("%Zd\n", ma);
+        assert(mpz_cubic_primality(ma) == true);
+
+        // 11111...0...3781 (1001-digits) The smallest Cyclops titanic prime.
+        // https://t5k.org/curios/page.php?number_id=18967
+        memset(titanic, '1', 1001);
+        titanic[500] = '0';
+        titanic[997] = '3';
+        titanic[998] = '7';
+        titanic[999] = '8';
+        titanic[1000] = '1';
+        titanic[1001] = 0;
+        mpz_set_str(mb, titanic, 10);
+        assert(mpz_cubic_primality(mb) == true);
+
+        // ---------------------------------------------------------------------------------
+        printf("Large composites (mpz)\n");
+        // a semiprime out of the 2 previous tests, no small factors.
+        mpz_mul(ma, mb, ma);
+        assert(mpz_cubic_primality(ma) == false);
+
+        // a large square
+        mpz_mul(ma, mb, mb);
+        assert(mpz_cubic_primality(ma) == false);
+
+        // a large cube
+        mpz_mul(ma, ma, mb);
+        assert(mpz_cubic_primality(ma) == false);
+
+        mpz_clears(ma, mb, 0);
+    }
 }

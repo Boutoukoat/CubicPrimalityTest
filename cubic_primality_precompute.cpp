@@ -36,7 +36,7 @@ static double mpz_log(mpz_t n)
     }
     else
     {
-        // compute the log of the only digit
+        // compute the log of the only limb
         ll = log((double)mpz_get_ui(n));
     }
     return ll;
