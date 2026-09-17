@@ -1345,7 +1345,7 @@ bool uint64_is_prime_mr(uint64_t n)
 // Assume that small factors and small primes are already processed, assume n > 5
 // Assume n is not a perfect square
 
-static bool uint64_lucas(uint64_t n)
+static bool uint64_lucas_nist(uint64_t n)
 {
     int64_t d = 5;
     int j;
@@ -1405,7 +1405,80 @@ static bool uint64_lucas(uint64_t n)
     return (U == 0);
 }
 
-static bool uint128_lucas(uint128_t n)
+static bool uint64_lucas_bpsw(uint64_t n)
+{
+    int j;
+    uint64_t P = 3;
+    uint64_t D = 5;
+
+    // process the sequence 5, 12, 21, 32, .... (assume n > 3)
+    while (1)
+    {
+	D = square_add_mod(P, n - 4, n);
+        if (D)
+        {
+            j = uint64_jacobi(D, n);
+            if (j == 0)
+            {
+                return false; // composite
+            }
+            if (j == -1)
+            {
+                break; // quadratic non-residue
+            }
+        }
+	P += 1;
+    }
+
+    uint64_t e = n + 1;
+    uint64_t d = e >> 1, s = 1;
+    while ((d & 1) == 0)
+    {
+	    d >>= 1;
+	    s += 1;
+    }
+
+    uint64_t bits = 1 + uint64_log_2(d);
+    uint64_t U = 0;
+    uint64_t V = 2;
+    uint128_t Ut, Vt;
+
+    while (bits--)
+    {
+        /* Double */
+        U = mul_mod(U, V, n);
+	V = square_add_mod(V, n-2, n);
+        if ((d >> bits) & 1) 
+	{
+            /* Add */
+            Ut  = P;
+	    Ut *= U;
+	    Ut += V;
+            Vt = D;
+	    Vt *= U;
+            Vt += mul_mod(P, V, n);
+            Ut += (Ut & 1) ? n : 0;
+            Vt += (Vt & 1) ? n : 0;
+            U = uint128_long_mod(Ut >> 1, n);
+            V = uint128_long_mod(Vt >> 1, n);
+        }
+    }
+    bool b = (U == 0 && (V == 2 || V == n-2));
+    if (b) return true;
+
+    while (s--)
+    {
+        if (V == 0)
+            return true;
+        V = square_add_mod(V, n-2, n);
+    }
+
+    return false;
+
+
+}
+
+static bool uint128_lucas_nist(uint128_t n)
 {
     int64_t d = 5;
     int j;
@@ -1465,8 +1538,17 @@ static bool uint128_lucas(uint128_t n)
     return (U == 0);
 }
 
-static bool uint64_is_prime_bpsw(uint64_t n)
+static bool uint64_is_prime_nist(uint64_t n)
 {
+    if (n < 5)
+    {
+            return n == 2 || n == 3;
+    }
+    if ((n & 1) == 0)
+    {
+            return false;
+    }
+
     uint64_t d = n >> 1;
     uint64_t s = uint64_tzcnt(d);
     d >>= s++;
@@ -1481,7 +1563,7 @@ static bool uint64_is_prime_bpsw(uint64_t n)
     {
         return false; // composite
     }
-    b = uint64_lucas(n);
+    b = uint64_lucas_nist(n);
     if (b != true)
     {
         return false; // composite
@@ -1490,8 +1572,51 @@ static bool uint64_is_prime_bpsw(uint64_t n)
     return true;
 }
 
-static bool uint128_is_prime_bpsw(uint128_t n)
+static bool uint64_is_prime_bpsw(uint64_t n)
 {
+    if (n < 5)
+    {
+            return n == 2 || n == 3;
+    }
+    if ((n & 1) == 0)
+    {
+            return false;
+    }
+
+    uint64_t d = n >> 1;
+    uint64_t s = uint64_tzcnt(d);
+    d >>= s++;
+
+    bool b = uint64_witness(n, s, d, 2);
+    if (b != true)
+    {
+        return false; // composite
+    }
+    b = uint64_is_perfect_square(n);
+    if (b == true)
+    {
+        return false; // composite
+    }
+    b = uint64_lucas_bpsw(n);
+    if (b != true)
+    {
+        return false; // composite
+    }
+    // really prime, proven to 2^64
+    return true;
+}
+
+static bool uint128_is_prime_nist(uint128_t n)
+{
+    if (n < 5)
+    {
+            return n == 2 || n == 3;
+    }
+    if ((n & 1) == 0)
+    {
+            return false;
+    }
+
     uint128_t d = n >> 1;
     uint64_t s = uint128_tzcnt(d);
     d >>= s++;
@@ -1507,7 +1632,7 @@ static bool uint128_is_prime_bpsw(uint128_t n)
         return false; // composite
     }
     return true;
-    b = uint128_lucas(n);
+    b = uint128_lucas_nist(n);
     if (b != true)
     {
         return false; // composite
