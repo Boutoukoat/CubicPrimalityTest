@@ -43,6 +43,14 @@ static int self_test_jacobi_64(void)
     int j, k;
 
     printf("Jacobi ...\n");
+    s = 5;
+    t = 11;
+    j = uint64_jacobi(s, t);
+    if (j != 1)
+    {
+        printf("failed Jacobi(%lu, %lu)\n", s, t);
+        return -1;
+    }
     s = 33;
     t = 9999;
     j = uint64_jacobi(s, t);
@@ -68,6 +76,7 @@ static int self_test_jacobi_64(void)
         return -1;
     }
 
+    // all pairs (s,t) < 101
     for (t = 1; t < 101; t += 2)
     {
         for (s = 1; s <= t; s += 2)
@@ -83,21 +92,39 @@ static int self_test_jacobi_64(void)
     }
 
     printf("Kronecker ...\n");
+    s = 5;
+    t = 11;
+    j = int64_kronecker(s, t);
+    if (j != 1)
+    {
+        printf("failed kronecker(%lu, %lu)\n", s, t);
+        return -1;
+    }
     s = 33;
     t = 9999;
     j = int64_kronecker(s, t);
     if (j != 0)
+    {
+        printf("failed kronecker(%lu, %lu)\n", s, t);
         return -1;
+    }
     s = 34;
     t = 9999;
     j = int64_kronecker(s, t);
     if (j != -1)
+    {
+        printf("failed kronecker(%lu, %lu)\n", s, t);
         return -1;
+    }
     s = 35;
     t = 9999;
     j = int64_kronecker(s, t);
     if (j != 1)
+    {
+        printf("failed kronecker(%lu, %lu)\n", s, t);
         return -1;
+    }
+
     j = int64_kronecker(11, 101);
     if (j != -1)
         return -1;

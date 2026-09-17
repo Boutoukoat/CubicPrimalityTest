@@ -6,62 +6,62 @@ static int self_test_powers_64(void)
     bool b;
 
     printf("Perfect square ...\n");
-    b = is_perfect_square(6);
+    b = uint64_is_perfect_square(6);
     if (b)
         return -1;
-    b = is_perfect_square(64);
+    b = uint64_is_perfect_square(64);
     if (!b)
         return -1;
-    b = is_perfect_square(27);
+    b = uint64_is_perfect_square(27);
     if (b)
         return -1;
-    b = is_perfect_square(0x1002001);
+    b = uint64_is_perfect_square(0x1002001);
     if (!b)
         return -1;
-    b = is_perfect_square(0x1002000);
+    b = uint64_is_perfect_square(0x1002000);
     if (b)
         return -1;
-    b = is_perfect_square(0x1002002);
+    b = uint64_is_perfect_square(0x1002002);
     if (b)
         return -1;
 
     printf("Perfect cube ...\n");
-    b = is_perfect_cube(6);
+    b = uint64_is_perfect_cube(6);
     if (b)
         return -1;
-    b = is_perfect_cube(64);
+    b = uint64_is_perfect_cube(64);
     if (!b)
         return -1;
-    b = is_perfect_cube(81);
+    b = uint64_is_perfect_cube(81);
     if (b)
         return -1;
-    b = is_perfect_cube(0x1003003001);
+    b = uint64_is_perfect_cube(0x1003003001);
     if (!b)
         return -1;
-    b = is_perfect_cube(0x1003003000);
+    b = uint64_is_perfect_cube(0x1003003000);
     if (b)
         return -1;
-    b = is_perfect_cube(0x1003003002);
+    b = uint64_is_perfect_cube(0x1003003002);
     if (b)
         return -1;
 
     printf("Perfect sursolid ...\n");
-    b = is_perfect_sursolid(6);
+    b = uint64_is_perfect_sursolid(6);
     if (b)
         return -1;
-    b = is_perfect_sursolid(64 * 16);
+    b = uint64_is_perfect_sursolid(64 * 16);
     if (!b)
         return -1;
-    b = is_perfect_sursolid(81);
+    b = uint64_is_perfect_sursolid(81);
     if (b)
         return -1;
-    b = is_perfect_sursolid(0x100500A00A005001ull);
+    b = uint64_is_perfect_sursolid(0x100500A00A005001ull);
     if (!b)
         return -1;
-    b = is_perfect_sursolid(0x100500A00A005000ull);
+    b = uint64_is_perfect_sursolid(0x100500A00A005000ull);
     if (b)
         return -1;
-    b = is_perfect_sursolid(0x100500A00A005002ull);
+    b = uint64_is_perfect_sursolid(0x100500A00A005002ull);
     if (b)
         return -1;
 
@@ -125,23 +125,23 @@ static int self_test_powers_64(void)
     {
         while (ppj < perfect_powers[ppi])
         {
-            b = is_perfect_power(ppj);
+            b = uint64_is_perfect_power(ppj);
             if (b)
                 return -1;
             ppj++;
         }
-        b = is_perfect_power(ppj);
+        b = uint64_is_perfect_power(ppj);
         if (!b)
             return -1;
         ppj++;
     }
-    b = is_perfect_power(0x100500A00A005001ull);
+    b = uint64_is_perfect_power(0x100500A00A005001ull);
     if (!b)
         return -1;
-    b = is_perfect_power(0x100500A00A005000ull);
+    b = uint64_is_perfect_power(0x100500A00A005000ull);
     if (b)
         return -1;
-    b = is_perfect_power(0x100500A00A005002ull);
+    b = uint64_is_perfect_power(0x100500A00A005002ull);
     if (b)
         return -1;
 
@@ -149,12 +149,12 @@ static int self_test_powers_64(void)
     barrett_t bt;
     barrett_precompute(&bt, 197);
     r = pow_mod(2, 0xfedc, 197);
-    s = pow2_mod(0xfedc, 197);
+    s = uint64_pow2_mod(0xfedc, 197);
     t = barrett_pow_mod(2, 0xfedc, bt);
     if (r != 182 || r != s || r != t)
         return -1;
     r = pow_mod(2, 0x8765, 197);
-    s = pow2_mod(0x8765, 197);
+    s = uint64_pow2_mod(0x8765, 197);
     t = barrett_pow_mod(2, 0x8765, bt);
     if (r != 103 || r != s || r != t)
         return -1;
@@ -162,14 +162,14 @@ static int self_test_powers_64(void)
     if (r != 153)
         return -1;
     r = pow_mod(2, 0x80, 197);
-    s = pow2_mod(0x80, 197);
+    s = uint64_pow2_mod(0x80, 197);
     if (r != 175 || r != s)
         return -1;
     r = pow_mod(2, 0x41, 197);
     if (r != 122)
         return -1;
     r = pow_mod(2, 0x40, 197);
-    s = pow2_mod(0x40, 197);
+    s = uint64_pow2_mod(0x40, 197);
     if (r != 61 || r != s)
         return -1;
     r = pow_mod(2, 0x22, 197);
@@ -179,7 +179,7 @@ static int self_test_powers_64(void)
     if (r != 176)
         return -1;
     r = pow_mod(2, 0x20, 197);
-    s = pow2_mod(0x20, 197);
+    s = uint64_pow2_mod(0x20, 197);
     if (r != 88 || r != s)
         return -1;
     r = pow_mod(2, 0x1f, 197);
@@ -189,11 +189,11 @@ static int self_test_powers_64(void)
     if (r != 22)
         return -1;
     r = pow_mod(2, 0x1d, 197);
-    s = pow2_mod(0x1d, 197);
+    s = uint64_pow2_mod(0x1d, 197);
     if (r != 11 || r != s)
         return -1;
     r = pow_mod(2, 0x1c, 197);
-    s = pow2_mod(0x1c, 197);
+    s = uint64_pow2_mod(0x1c, 197);
     if (r != 104 || r != s)
         return -1;
 

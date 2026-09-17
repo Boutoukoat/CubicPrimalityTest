@@ -304,8 +304,9 @@ void verify_all_a(uint64_t n, uint64_t q, uint64_t R_exp, uint64_t &modexp, uint
     struct barrett_t bn;
     barrett_precompute(&bn, n);
     uint64_t a = 7;
-    uint64_t R_exp_mod = R_exp%(q - 1);
-    if (R_exp_mod == 0) R_exp_mod = R_exp;
+    uint64_t R_exp_mod = R_exp % (q - 1);
+    if (R_exp_mod == 0)
+        R_exp_mod = R_exp;
     for (uint64_t d = 0; d < n; d += 2)
     {
         // a = 7 + k * (k-1) unrolled as  a = a + 2k
@@ -314,9 +315,8 @@ void verify_all_a(uint64_t n, uint64_t q, uint64_t R_exp, uint64_t &modexp, uint
 
         // verify test Mod(a,n)^R_exp == 1
         modexp += (R_exp != 0);
-        if (pow_mod(a, R_exp_mod, q) == 1 &&
-           barrett_pow_mod(a, R_exp, bn) == 1)
-          {
+        if (pow_mod(a, R_exp_mod, q) == 1 && barrett_pow_mod(a, R_exp, bn) == 1)
+        {
             exponentiate += 1;
             // run cubic test
             // B = Mod(x, n)
@@ -398,8 +398,8 @@ void verify_all_a(uint64_t n, uint64_t q, uint64_t R_exp, uint64_t &modexp, uint
 struct ring_entry_t
 {
     uint64_t __attribute__((aligned(64))) n; // composite number n
-    uint64_t q_prime;                       // fermat exponent (can be 0 == skip fermat test)
-    uint64_t R_exp;                        // cubic exponentiation exponent
+    uint64_t q_prime;                        // fermat exponent (can be 0 == skip fermat test)
+    uint64_t R_exp;                          // cubic exponentiation exponent
     uint64_t modexp;                         // count of modexp for that n
     uint64_t exponentiate;                   // count of exponentiate for that n
 };
@@ -785,7 +785,7 @@ int main(int argc, char **argv)
             // ------------------------------------------------------------------------------
             if (f[0].count % 3 != 0)
             {
-		worked_prime_power_count += 1;
+                worked_prime_power_count += 1;
                 mt_verify_all_a(n, f[0].prime, n - 1);
             }
             else
@@ -805,23 +805,23 @@ int main(int argc, char **argv)
             {
                 uint64_t p = f[i].prime;
                 uint64_t Q = n / p;
-		uint128_t p3m1 = (uint128_t)p * p * p - 1;
-		uint128_t Qm1 = (uint128_t)Q - 1;
-		uint128_t Qmp = (uint128_t)Q > p ? Q - p : p - Q;
-		uint128_t g1 = uint128_gcd(p3m1, Qm1);
-		uint128_t g2 = uint128_gcd(p3m1, Qmp);
-		uint128_t g3 = uint128_gcd(g1, g2);
-		uint128_t lcm =  (g1 * g2 / g3);
-		uint64_t R = (lcm > n - 1) ? (n - 1) : (n - 1) % (uint64_t)lcm;
+                uint128_t p3m1 = (uint128_t)p * p * p - 1;
+                uint128_t Qm1 = (uint128_t)Q - 1;
+                uint128_t Qmp = (uint128_t)Q > p ? Q - p : p - Q;
+                uint128_t g1 = uint128_gcd(p3m1, Qm1);
+                uint128_t g2 = uint128_gcd(p3m1, Qmp);
+                uint128_t g3 = uint128_gcd(g1, g2);
+                uint128_t lcm = (g1 * g2 / g3);
+                uint64_t R = (lcm > n - 1) ? (n - 1) : (n - 1) % (uint64_t)lcm;
                 if ((R < 3) || (p != 5 && R == 4) || (p < V_COUNT && R < V[p]) || (R < p - 1 && p % 10 != 1))
                 {
                     // early terminate this number
                     break;
                 }
- 		uint128_t Q3m1 = (uint128_t)Q * Q * Q - 1;
-  		uint128_t g = uint128_gcd(p3m1, Q3m1);
-		R = (g > n - 1) ? (n - 1) : (n - 1) % (uint64_t)g;
-		if ((R < 3) || (p != 5 && R == 4) || (p < V_COUNT && R < V[p]) || (R < p - 1 && p % 10 != 1))
+                uint128_t Q3m1 = (uint128_t)Q * Q * Q - 1;
+                uint128_t g = uint128_gcd(p3m1, Q3m1);
+                R = (g > n - 1) ? (n - 1) : (n - 1) % (uint64_t)g;
+                if ((R < 3) || (p != 5 && R == 4) || (p < V_COUNT && R < V[p]) || (R < p - 1 && p % 10 != 1))
                 {
                     // early terminate this number
                     break;
@@ -848,41 +848,41 @@ int main(int argc, char **argv)
             // ------------------------------------------------------------------------------
             uint64_t p = f[0].prime;
             uint64_t Q = f[1].prime;
-	    uint128_t p3m1 = (uint128_t)p * p * p - 1;
-	    uint128_t Qm1 = (uint128_t)Q - 1;
-	    uint128_t Qmp = (uint128_t)Q > p ? Q - p : p - Q;
-	    uint128_t g1 = uint128_gcd(p3m1, Qm1);
-	    uint128_t g2 = uint128_gcd(p3m1, Qmp);
-	    uint128_t g3 = uint128_gcd(g1, g2);
-	    uint128_t lcm =  g1 * g2 / g3;
-	    uint64_t R = (lcm > n - 1) ? (n - 1) : (n - 1) % (uint64_t)lcm;
+            uint128_t p3m1 = (uint128_t)p * p * p - 1;
+            uint128_t Qm1 = (uint128_t)Q - 1;
+            uint128_t Qmp = (uint128_t)Q > p ? Q - p : p - Q;
+            uint128_t g1 = uint128_gcd(p3m1, Qm1);
+            uint128_t g2 = uint128_gcd(p3m1, Qmp);
+            uint128_t g3 = uint128_gcd(g1, g2);
+            uint128_t lcm = g1 * g2 / g3;
+            uint64_t R = (lcm > n - 1) ? (n - 1) : (n - 1) % (uint64_t)lcm;
             if (!(R < 3 || (p != 5 && R == 4) || (p < V_COUNT && R < V[p]) || (R < p - 1 && p % 10 != 1)))
             {
- 		uint128_t Q3m1 = (uint128_t)Q * Q * Q - 1;
-		uint128_t pm1 = (uint128_t)p - 1;
-	        g1 = uint128_gcd(Q3m1, pm1);
-		g2 = uint128_gcd(Q3m1, Qmp);
-		g3 = uint128_gcd(g1, g2);
-    	        uint128_t lcm =  g1 * g2 / g3;
-	        uint64_t R = (lcm > n - 1) ? (n - 1) : (n - 1) % (uint64_t)lcm;
+                uint128_t Q3m1 = (uint128_t)Q * Q * Q - 1;
+                uint128_t pm1 = (uint128_t)p - 1;
+                g1 = uint128_gcd(Q3m1, pm1);
+                g2 = uint128_gcd(Q3m1, Qmp);
+                g3 = uint128_gcd(g1, g2);
+                uint128_t lcm = g1 * g2 / g3;
+                uint64_t R = (lcm > n - 1) ? (n - 1) : (n - 1) % (uint64_t)lcm;
                 if (!(R < 3 || (Q != 5 && R == 4) || (Q < V_COUNT && R < V[Q]) || (R < Q - 1 && Q % 10 != 1)))
                 {
-  		    uint128_t g = uint128_gcd(p3m1, Q3m1);
-         	    R = (g > n - 1) ? (n - 1) : (n - 1) % (uint64_t)g;
-		    if (!((R < 3) || (p != 5 && R == 4) || (p < V_COUNT && R < V[p]) || (R < p - 1 && p % 10 != 1) ||
-                        (Q < V_COUNT && R < V[Q]) || (R < Q - 1 && Q % 10 != 1)))
+                    uint128_t g = uint128_gcd(p3m1, Q3m1);
+                    R = (g > n - 1) ? (n - 1) : (n - 1) % (uint64_t)g;
+                    if (!((R < 3) || (p != 5 && R == 4) || (p < V_COUNT && R < V[p]) || (R < p - 1 && p % 10 != 1) ||
+                          (Q < V_COUNT && R < V[Q]) || (R < Q - 1 && Q % 10 != 1)))
                     {
                         worked_semiprime_count += 1;
-                	mt_verify_all_a(n, Q, n - 1);
-            	    }
-	            else
-        	    {
-                	skip_semiprime_count += 1;
-            	    }
-	        }
+                        mt_verify_all_a(n, Q, n - 1);
+                    }
+                    else
+                    {
+                        skip_semiprime_count += 1;
+                    }
+                }
                 else
                 {
-        	    skip_semiprime_count += 1;
+                    skip_semiprime_count += 1;
                 }
             }
             else
@@ -901,25 +901,24 @@ int main(int argc, char **argv)
             {
                 uint64_t p = f[i].prime;
                 uint64_t Q = n / p;
-		uint128_t p3m1 = (uint128_t)p * p * p - 1;
-		uint128_t Qm1 = (uint128_t)Q - 1;
-		uint128_t Qmp = (uint128_t)Q > p ? Q - p : p - Q;
-		uint128_t g1 = uint128_gcd(p3m1, Qm1);
-		uint128_t g2 = uint128_gcd(p3m1, Qmp);
-		uint128_t g3 = uint128_gcd(g1, g2);
-		uint128_t lcm =  g1 * g2 / g3;
-		uint64_t R = (lcm > n - 1) ? (n - 1) : (n - 1) % (uint64_t)lcm;
+                uint128_t p3m1 = (uint128_t)p * p * p - 1;
+                uint128_t Qm1 = (uint128_t)Q - 1;
+                uint128_t Qmp = (uint128_t)Q > p ? Q - p : p - Q;
+                uint128_t g1 = uint128_gcd(p3m1, Qm1);
+                uint128_t g2 = uint128_gcd(p3m1, Qmp);
+                uint128_t g3 = uint128_gcd(g1, g2);
+                uint128_t lcm = g1 * g2 / g3;
+                uint64_t R = (lcm > n - 1) ? (n - 1) : (n - 1) % (uint64_t)lcm;
                 if (R < 3 || (p != 5 && R == 4) || (p < V_COUNT && R < V[p]) || (R < p - 1 && p % 10 != 1))
                 {
                     // early terminate this number
                     break;
                 }
- 		uint128_t Q3m1 = (uint128_t)Q * Q * Q - 1;
-  		uint128_t g = uint128_gcd(p3m1, Q3m1);
+                uint128_t Q3m1 = (uint128_t)Q * Q * Q - 1;
+                uint128_t g = uint128_gcd(p3m1, Q3m1);
                 R = (g > n - 1) ? (n - 1) : (n - 1) % (uint64_t)g;
-		if (R < 3 || (p != 5 && R == 4) || (p < V_COUNT && R < V[p]) || (R < p - 1 && p % 10 != 1))
+                if (R < 3 || (p != 5 && R == 4) || (p < V_COUNT && R < V[p]) || (R < p - 1 && p % 10 != 1))
                 {
-
 
                     // early terminate this number
                     break;
@@ -947,22 +946,22 @@ int main(int argc, char **argv)
             {
                 uint64_t p = f[i].prime;
                 uint64_t Q = n / p;
-		uint128_t p3m1 = (uint128_t)p * p * p -1;
-		uint128_t Qm1 = (uint128_t)Q - 1;
-		uint128_t Qmp = (uint128_t)Q > p ? Q - p : p - Q;
-		uint128_t g1 = uint128_gcd(p3m1, Qm1);
-		uint128_t g2 = uint128_gcd(p3m1, Qmp);
-		uint128_t g3 = uint128_gcd(g1, g2);
-		uint128_t lcm =  g1 * g2 / g3;
-		uint64_t R = (lcm > n - 1) ? (n - 1) : (n - 1) % (uint64_t)lcm;
+                uint128_t p3m1 = (uint128_t)p * p * p - 1;
+                uint128_t Qm1 = (uint128_t)Q - 1;
+                uint128_t Qmp = (uint128_t)Q > p ? Q - p : p - Q;
+                uint128_t g1 = uint128_gcd(p3m1, Qm1);
+                uint128_t g2 = uint128_gcd(p3m1, Qmp);
+                uint128_t g3 = uint128_gcd(g1, g2);
+                uint128_t lcm = g1 * g2 / g3;
+                uint64_t R = (lcm > n - 1) ? (n - 1) : (n - 1) % (uint64_t)lcm;
                 if (R < 3 || (p != 5 && R == 4) || (p < V_COUNT && R < V[p]) || (R < p - 1 && p % 10 != 1))
                 {
                     break;
                 }
- 		uint128_t Q3m1 = (uint128_t)Q * Q * Q - 1;
-  		uint64_t g = uint128_gcd(p3m1, Q3m1);
+                uint128_t Q3m1 = (uint128_t)Q * Q * Q - 1;
+                uint64_t g = uint128_gcd(p3m1, Q3m1);
                 R = (g > n - 1) ? (n - 1) : (n - 1) % (uint64_t)g;
-		if (R < 3 || (p != 5 && R == 4) || (p < V_COUNT && R < V[p]) || (R < p - 1 && p % 10 != 1))
+                if (R < 3 || (p != 5 && R == 4) || (p < V_COUNT && R < V[p]) || (R < p - 1 && p % 10 != 1))
                 {
 
                     // early terminate this number
