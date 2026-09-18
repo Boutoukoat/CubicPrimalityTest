@@ -132,6 +132,15 @@ static inline uint128_t uint128_mul_mod(uint128_t a, uint128_t b, uint128_t n)
     return (uint128_t)tmp;
 }
 
+static inline uint128_t uint128_mul_add_mod(uint128_t a, uint128_t b, uint128_t c, uint128_t n)
+{
+    uint256_t tmp = a;
+    tmp *= b;
+    tmp += c;
+    tmp %= n;
+    return (uint128_t)tmp;
+}
+
 static inline uint64_t square_mod(uint64_t a, uint64_t n)
 {
 #ifdef __x86_64__
@@ -150,6 +159,15 @@ static inline uint128_t uint128_square_mod(uint128_t a, uint128_t n)
 {
     uint256_t tmp = a;
     tmp *= a;
+    tmp %= n;
+    return (uint128_t)tmp;
+}
+
+static inline uint128_t uint128_square_add_mod(uint128_t a, uint128_t c, uint128_t n)
+{
+    uint256_t tmp = a;
+    tmp *= a;
+    tmp += c;
     tmp %= n;
     return (uint128_t)tmp;
 }
@@ -194,8 +212,24 @@ static inline uint64_t shift_mod(uint64_t u, uint64_t s, uint64_t n)
 #else
     uint128_t t = (uint128_t)u;
     t <<= s;
-    return t % n;
+    return (uint64_t)(t % n);
 #endif
+}
+
+static inline uint128_t uint128_shift_mod(uint128_t u, uint64_t s, uint128_t n)
+{
+    if (s >= 128 || u >> (128 - s))
+    {
+    uint256_t t = u;
+    t <<= s;
+    return (uint128_t)(t % n);
+    }
+		    else
+		    {
+    uint128_t t = u;
+    t <<= s;
+    return (uint128_t)(t % n);
+		    }
 }
 
 // count leading zeroed bits
@@ -292,6 +326,7 @@ static uint64_t uint64_phi(uint64_t m)
 
 // assume a >= 0
 // assume odd b > 0
+// assume a < 2^62 or b < 2^62
 static int uint64_jacobi(uint64_t a, uint64_t b)
 {
     static char cols[]
@@ -630,7 +665,7 @@ static int uint64_jacobi(uint64_t a, uint64_t b)
         }
     }
 
-    // 64 <= a < b with b odd
+    // 64 <= a < b with b odd and a < 2^62
     int t = 1;
     if ((a & 3) == 0)
     {
@@ -791,7 +826,7 @@ static int int128_kronecker(int128_t a, int128_t b)
     }
 
     unsigned c = (b >> 2) ^ (b >> 1);
-    while (a >> 64 || b >> 64)
+    while ((a | b) >> 62 != 0)
     {
         v = uint128_tzcnt(a);
         a >>= v;
@@ -841,8 +876,8 @@ static int int128_kronecker(int128_t a, int128_t b)
         return t;
     }
 
-    v = uint64_jacobi((uint64_t)a, (uint64_t)b);
-    return (t < 0) ? -v : v;
+    int r = uint64_jacobi((uint64_t)a, (uint64_t)b);
+    return (t < 0) ? -r : r;
 }
 
 // integer square root (rounded down)
@@ -894,7 +929,7 @@ static uint64_t uint64_isqrt(uint64_t x)
     return sqr_diff < 0 ? y - 1 : y;
 }
 
-// return smallest factor of n < 157*157, or 1 if none is found.
+// return smallest factor of n < 2^64 , exact if n < 157*157, return 1 if none is found.
 static uint64_t uint64_small_factor(uint64_t n)
 {
     if (n <= 152)
@@ -989,6 +1024,7 @@ static uint64_t uint64_small_factor(uint64_t n)
 
 // modular exponentiation 2^e mod m
 // assume e > 0, m > 0
+// valid if e < 2^64, m < 2^64
 static uint64_t uint64_pow2_mod(uint64_t e, uint64_t m)
 {
     uint64_t n = uint64_log_2(e);
@@ -1021,10 +1057,28 @@ static uint64_t uint64_pow2_mod(uint64_t e, uint64_t m)
     return result;
 }
 
+// modular exponentiation 2^e mod m
+// assume e > 0, m > 0
+// valid if e < 2^128, m < 2^128
 static uint128_t uint128_pow2_mod(uint128_t e, uint128_t m)
 {
     uint64_t n = uint128_log_2(e);
-    uint128_t result = 2;
+    uint64_t s = (n >= 5) ? 5 : n;
+    n -= s;
+    uint128_t mask = e >> n;
+    uint128_t result = uint128_shift_mod(1ull, mask, m);
+    while (n >= 6)
+    {
+        n -= 6;
+        result = uint128_square_mod(result, m);
+        result = uint128_square_mod(result, m);
+        result = uint128_square_mod(result, m);
+        result = uint128_square_mod(result, m);
+        result = uint128_square_mod(result, m);
+        result = uint128_square_mod(result, m);
+        mask = (e >> n) & 0x3f;
+        result = uint128_shift_mod(result, mask, m);
+    }
     while (n--)
     {
         result = uint128_square_mod(result, m);
@@ -1341,8 +1395,8 @@ bool uint64_is_prime_mr(uint64_t n)
            uint64_witness(n, s, d, 29) && uint64_witness(n, s, d, 31) && uint64_witness(n, s, d, 37);
 }
 
-// deterministic primality test for n < 2^64.
-// Assume that small factors and small primes are already processed, assume n > 5
+// primality test for n < 2^64.
+// Assume that small factors and small primes are already processed, assume n >= 5
 // Assume n is not a perfect square
 
 static bool uint64_lucas_nist(uint64_t n)
@@ -1405,16 +1459,18 @@ static bool uint64_lucas_nist(uint64_t n)
     return (U == 0);
 }
 
+// primality test for n < 2^64.
+// Assume that small factors and small primes are already processed, assume n >= 5
 static bool uint64_lucas_bpsw(uint64_t n)
 {
     int j;
     uint64_t P = 3;
     uint64_t D = 5;
 
-    // process the sequence 5, 12, 21, 32, .... (assume n > 3)
+    // process the sequence 5, 12, 21, 32, .... (require n > 3)
     while (1)
     {
-	D = square_add_mod(P, n - 4, n);
+        D = square_add_mod(P, n - 4, n);
         if (D)
         {
             j = uint64_jacobi(D, n);
@@ -1427,15 +1483,15 @@ static bool uint64_lucas_bpsw(uint64_t n)
                 break; // quadratic non-residue
             }
         }
-	P += 1;
+        P += 1;
     }
 
     uint64_t e = n + 1;
     uint64_t d = e >> 1, s = 1;
     while ((d & 1) == 0)
     {
-	    d >>= 1;
-	    s += 1;
+        d >>= 1;
+        s += 1;
     }
 
     uint64_t bits = 1 + uint64_log_2(d);
@@ -1447,15 +1503,15 @@ static bool uint64_lucas_bpsw(uint64_t n)
     {
         /* Double */
         U = mul_mod(U, V, n);
-	V = square_add_mod(V, n-2, n);
-        if ((d >> bits) & 1) 
-	{
+        V = square_add_mod(V, n - 2, n);
+        if ((d >> bits) & 1)
+        {
             /* Add */
-            Ut  = P;
-	    Ut *= U;
-	    Ut += V;
+            Ut = P;
+            Ut *= U;
+            Ut += V;
             Vt = D;
-	    Vt *= U;
+            Vt *= U;
             Vt += mul_mod(P, V, n);
             Ut += (Ut & 1) ? n : 0;
             Vt += (Vt & 1) ? n : 0;
@@ -1463,24 +1519,23 @@ static bool uint64_lucas_bpsw(uint64_t n)
             V = uint128_long_mod(Vt >> 1, n);
         }
     }
-    bool b = (U == 0 && (V == 2 || V == n-2));
-    if (b) return true;
+    bool b = (U == 0 && (V == 2 || V == n - 2));
+    if (b)
+        return true;
 
     while (s--)
     {
         if (V == 0)
             return true;
-        V = square_add_mod(V, n-2, n);
+        V = square_add_mod(V, n - 2, n);
     }
 
     return false;
-
-
 }
 
 static bool uint128_lucas_nist(uint128_t n)
 {
-    int64_t d = 5;
+    int128_t d = 5;
     int j;
     int sgn = 1;
 
@@ -1542,11 +1597,11 @@ static bool uint64_is_prime_nist(uint64_t n)
 {
     if (n < 5)
     {
-            return n == 2 || n == 3;
+        return n == 2 || n == 3;
     }
     if ((n & 1) == 0)
     {
-            return false;
+        return false;
     }
 
     uint64_t d = n >> 1;
@@ -1576,11 +1631,11 @@ static bool uint64_is_prime_bpsw(uint64_t n)
 {
     if (n < 5)
     {
-            return n == 2 || n == 3;
+        return n == 2 || n == 3;
     }
     if ((n & 1) == 0)
     {
-            return false;
+        return false;
     }
 
     uint64_t d = n >> 1;
@@ -1610,11 +1665,11 @@ static bool uint128_is_prime_nist(uint128_t n)
 {
     if (n < 5)
     {
-            return n == 2 || n == 3;
+        return n == 2 || n == 3;
     }
     if ((n & 1) == 0)
     {
-            return false;
+        return false;
     }
 
     uint128_t d = n >> 1;
@@ -1637,7 +1692,7 @@ static bool uint128_is_prime_nist(uint128_t n)
     {
         return false; // composite
     }
-    // really prime, proven to 2^64
+    // really prime, proven to 2^64, very likely to 2^128
     return true;
 }
 
@@ -2297,7 +2352,7 @@ static void uint64_large_factors(factor_v &primes, uint64_t n)
             if (factor == 1)
             {
                 // get more prime and composite factors from pollard-rho method O(smallest factor^1/2)   <= O(n^1/4)
-                // which returns only when a factor is found. Unfortunately, random parameters makes it hasardeous, 
+                // which returns only when a factor is found. Unfortunately, random parameters makes it hasardeous,
                 // and it could take a long, long time to run to completion.
                 factor = uint64_brent_pollard_factor(m);
             }

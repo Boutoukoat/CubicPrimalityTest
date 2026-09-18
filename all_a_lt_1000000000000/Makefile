@@ -27,7 +27,7 @@ test: ./all_a
 	./all_a -max 200000
 
 unit_test: math_tests.cpp math_utils.cpp
-	g++ -O3 -o unit_tests math_tests.cpp
+	clang++ -O3 -o unit_tests math_tests.cpp
 	./unit_tests
 
 

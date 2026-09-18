@@ -7,6 +7,8 @@
 #include "math_phi_tests.cpp"
 #include "math_powers_tests.cpp"
 #include "math_prime_tests.cpp"
+#include "math_shift_tests.cpp"
+#include "math_mod_tests.cpp"
 
 static int self_test_64(void)
 {
@@ -14,33 +16,29 @@ static int self_test_64(void)
     bool b;
     int j;
 
-    printf("Modular operations ...\n");
-    s = 10103;
-    t = 10101;
-    r = square_mod(s, t);
-    assert(r == 4);
-    s = 10103;
-    t = 10101;
-    r = mul_mod(s, s, t);
-    assert(r == 4);
+    if (self_test_mod_64() != 0)
+    {
+	    printf("Modular op failed\n");
+	    return -1;
+    }
 
-    s = 1;
-    t = 65535;
-    r = shift_mod(s, 16, t);
-    assert(r == 1);
-    r = shift_mod(s, 32, t);
-    assert(r == 1);
-    r = shift_mod(s, 48, t);
-    assert(r == 1);
+    if (self_test_mod_128() != 0)
+    {
+	    printf("Modular op failed\n");
+	    return -1;
+    }
 
-    s = 3ull << 47;
-    t = (1ull << 60) - 1;
-    r = shift_mod(s, 13, t);
-    assert(r == 3);
-    r = shift_mod(s, 23, t);
-    assert(r == 3072);
-    r = shift_mod(s, 33, t);
-    assert(r == 3145728);
+    if (self_test_shift_64() != 0)
+    {
+	    printf("Modular shift failed\n");
+	    return -1;
+    }
+
+    if (self_test_shift_128() != 0)
+    {
+	    printf("modular shift failed\n");
+	    return -1;
+    }
 
     if (self_test_barrett_64() != 0)
     {
@@ -159,7 +157,13 @@ static int self_test_64(void)
 
     if (self_test_prime_64() != 0)
     {
-        printf("Prime failed\n");
+        printf("Prime 64 bits failed\n");
+        return -1;
+    }
+
+    if (self_test_prime_128() != 0)
+    {
+        printf("Prime 128 bits failed\n");
         return -1;
     }
 
