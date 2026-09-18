@@ -220,16 +220,16 @@ static inline uint128_t uint128_shift_mod(uint128_t u, uint64_t s, uint128_t n)
 {
     if (s >= 128 || u >> (128 - s))
     {
-    uint256_t t = u;
-    t <<= s;
-    return (uint128_t)(t % n);
+        uint256_t t = u;
+        t <<= s;
+        return (uint128_t)(t % n);
     }
-		    else
-		    {
-    uint128_t t = u;
-    t <<= s;
-    return (uint128_t)(t % n);
-		    }
+    else
+    {
+        uint128_t t = u;
+        t <<= s;
+        return (uint128_t)(t % n);
+    }
 }
 
 // count leading zeroed bits

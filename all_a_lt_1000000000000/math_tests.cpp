@@ -4,11 +4,11 @@
 #include "math_barrett_tests.cpp"
 #include "math_isqrt_tests.cpp"
 #include "math_jacobi_tests.cpp"
+#include "math_mod_tests.cpp"
 #include "math_phi_tests.cpp"
 #include "math_powers_tests.cpp"
 #include "math_prime_tests.cpp"
 #include "math_shift_tests.cpp"
-#include "math_mod_tests.cpp"
 
 static int self_test_64(void)
 {
@@ -18,26 +18,26 @@ static int self_test_64(void)
 
     if (self_test_mod_64() != 0)
     {
-	    printf("Modular op failed\n");
-	    return -1;
+        printf("Modular op failed\n");
+        return -1;
     }
 
     if (self_test_mod_128() != 0)
     {
-	    printf("Modular op failed\n");
-	    return -1;
+        printf("Modular op failed\n");
+        return -1;
     }
 
     if (self_test_shift_64() != 0)
     {
-	    printf("Modular shift failed\n");
-	    return -1;
+        printf("Modular shift failed\n");
+        return -1;
     }
 
     if (self_test_shift_128() != 0)
     {
-	    printf("modular shift failed\n");
-	    return -1;
+        printf("modular shift failed\n");
+        return -1;
     }
 
     if (self_test_barrett_64() != 0)

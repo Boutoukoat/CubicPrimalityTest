@@ -9,13 +9,13 @@ static int self_test_mod_64(void)
     r = square_mod(s, t);
     if (r != 4)
     {
-	    return -1;
+        return -1;
     }
 
     r = mul_mod(s, s, t);
     if (r != 4)
     {
-	    return -1;
+        return -1;
     }
 
     t = 10101;
@@ -25,13 +25,13 @@ static int self_test_mod_64(void)
     r = square_mod(s, t);
     if (r != 4)
     {
-	    return -1;
+        return -1;
     }
 
     r = mul_mod(s, s, t);
     if (r != 4)
     {
-	    return -1;
+        return -1;
     }
 
     t = 10101;
@@ -42,13 +42,13 @@ static int self_test_mod_64(void)
     r = square_add_mod(s, u, t);
     if (r != 4 + u)
     {
-	    return -1;
+        return -1;
     }
 
     r = mul_add_mod(s, s, u, t);
     if (r != 4 + u)
     {
-	    return -1;
+        return -1;
     }
 
     return 0;
@@ -64,13 +64,13 @@ static int self_test_mod_128(void)
     r = uint128_square_mod(s, t);
     if (r != 4)
     {
-	    return -1;
+        return -1;
     }
 
     r = uint128_mul_mod(s, s, t);
     if (r != 4)
     {
-	    return -1;
+        return -1;
     }
 
     t = 10101;
@@ -80,13 +80,13 @@ static int self_test_mod_128(void)
     r = uint128_square_mod(s, t);
     if (r != 4)
     {
-	    return -1;
+        return -1;
     }
 
     r = uint128_mul_mod(s, s, t);
     if (r != 4)
     {
-	    return -1;
+        return -1;
     }
 
     t = 10101;
@@ -97,19 +97,14 @@ static int self_test_mod_128(void)
     r = uint128_square_add_mod(s, u, t);
     if (r != 4 + u)
     {
-            return -1;
+        return -1;
     }
 
     r = uint128_mul_add_mod(s, s, u, t);
     if (r != 4 + u)
     {
-            return -1;
+        return -1;
     }
 
     return 0;
 }
-
-
-
-
-
