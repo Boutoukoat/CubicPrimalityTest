@@ -1063,20 +1063,21 @@ static uint64_t uint64_pow2_mod(uint64_t e, uint64_t m)
 static uint128_t uint128_pow2_mod(uint128_t e, uint128_t m)
 {
     uint64_t n = uint128_log_2(e);
-    uint64_t s = (n >= 5) ? 5 : n;
+    uint64_t s = (n >= 6) ? 6 : n;
     n -= s;
     uint128_t mask = e >> n;
     uint128_t result = uint128_shift_mod(1ull, mask, m);
-    while (n >= 6)
+    while (n >= 7)
     {
-        n -= 6;
+        n -= 7;
         result = uint128_square_mod(result, m);
         result = uint128_square_mod(result, m);
         result = uint128_square_mod(result, m);
         result = uint128_square_mod(result, m);
         result = uint128_square_mod(result, m);
         result = uint128_square_mod(result, m);
-        mask = (e >> n) & 0x3f;
+        result = uint128_square_mod(result, m);
+        mask = (e >> n) & 0x7f;
         result = uint128_shift_mod(result, mask, m);
     }
     while (n--)
@@ -1766,7 +1767,9 @@ static uint128_t uint128_gcd(uint128_t u, uint128_t v)
     return u << k;
 }
 
-// binary modular inverse 1/x mod m, with m odd and x < m, x and m coprime
+// binary modular inverse 1/x mod m, x and m coprime
+// r = (1/x) mod m
+
 static uint64_t uint64_mod_inv(uint64_t x, uint64_t m)
 {
     if (x < 2)
@@ -1796,6 +1799,38 @@ static uint64_t uint64_mod_inv(uint64_t x, uint64_t m)
         u = (u >= v) ? u - v : u + m - v;
     }
     return b == 1 ? v : 0;
+}
+
+// r = (-1/a) mod 2^64
+static inline uint64_t uint64_mod_inv_pow2(uint64_t a)
+{
+    uint64_t x = (3ull * a) ^ 2ull; // 5 bits accurate
+    uint64_t t = 1ull - a * x;
+    x *= 1 + t; // 10 bits accurate
+    t *= t;
+    x *= 1 + t; // 20 bits accurate
+    t *= t;
+    x *= 1 + t; // 40 bits accurate
+    t *= t;
+    x *= 1 + t; // 80 bits accurate , i.e. > 64 bits
+    return 0 - x;
+}
+
+// r = (-1/a) mod 2^128
+static inline uint128_t uint128_mod_inv_pow2(uint128_t a)
+{
+    uint128_t x = (3ull * a) ^ 2ull; // 5 bits accurate
+    uint128_t t = 1ull - a * x;
+    x *= 1 + t; // 10 bits accurate
+    t *= t;
+    x *= 1 + t; // 20 bits accurate
+    t *= t;
+    x *= 1 + t; // 40 bits accurate
+    t *= t;
+    x *= 1 + t; // 80 bits accurate
+    t *= t;
+    x *= 1 + t; // 160 bits accurate, > 128 bits required
+    return 0 - x;
 }
 
 // Solve:
