@@ -1,5 +1,6 @@
 
 #include "math_utils.cpp"
+#include "math_poly_utils.cpp"
 
 #include "math_barrett_tests.cpp"
 #include "math_factor_tests.cpp"
@@ -11,6 +12,7 @@
 #include "math_powers_tests.cpp"
 #include "math_prime_tests.cpp"
 #include "math_shift_tests.cpp"
+#include "math_poly_tests.cpp"
 
 static int self_test_64(void)
 {
@@ -93,6 +95,12 @@ static int self_test_64(void)
     if (self_test_factor_64() != 0)
     {
         printf("Factor search failed\n");
+        return -1;
+    }
+
+    if (self_test_poly_64() != 0)
+    {
+        printf("Polynomial tests failed\n");
         return -1;
     }
 
