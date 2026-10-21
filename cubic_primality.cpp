@@ -1252,6 +1252,70 @@ void cubic_primality_self_test(void)
 
         // clears temp structure
         mpz_mod_uncompute(p);
+
+	// verify modulus a*2^n-b
+        mpz_set_ui(ma, 0x3201ffffffffe677ul);
+	gmp_printf("modulus %Zx %u\n", ma, mpz_sizeinbase(ma, 2));
+        p = mpz_mod_precompute(ma);
+	mpz_set(tmp, p->a);
+        mpz_mul_2exp(tmp, tmp, p->n2);
+        mpz_sub(tmp, tmp, p->b);
+
+        assert(p->special_case == true);
+        assert(p->montg == true);
+        assert(p->gmn == true);
+        mpz_sub_ui(mb, ma, 1);
+        mpz_mod_to_montg(mb, p);
+        mpz_mul(x, mb, mb);
+        mpz_mod_fast_reduce(x, tmp, p);
+        mpz_mod_from_montg(x, tmp, p);
+        mpz_mod_slow_reduce(x, p);
+	assert(mpz_cmp_ui(x, 1) == 0);
+ 	
+        // clears temp structure
+        mpz_mod_uncompute(p);
+
+	// verify modulus a*2^n-b
+        mpz_set_ui(ma, 0x32fffffffff9e679ul);
+
+	// gmp_printf("modulus %Zx %u\n", ma, mpz_sizeinbase(ma, 2));
+        p = mpz_mod_precompute(ma);
+	// gmp_printf("a %Zx %u\n", p->a, mpz_sizeinbase(p->a, 2));
+	// gmp_printf("b %Zx %u\n", p->b, mpz_sizeinbase(p->b, 2));
+	mpz_set(tmp, p->a);
+        mpz_mul_2exp(tmp, tmp, p->n2);
+        mpz_sub(tmp, tmp, p->b);
+	// gmp_printf("modulus %Zx %u\n", tmp, mpz_sizeinbase(tmp, 2));
+
+        assert(p->special_case == true);
+        assert(p->montg == true);
+        assert(p->gmn == true);
+        mpz_sub_ui(mb, ma, 1);
+        mpz_mod_to_montg(mb, p);
+        mpz_mul(x, mb, mb);
+	// gmp_printf("mb^2 %Zx\n", x);
+            mpz_div_2exp(p->x_hi, x, p->n2);
+            mpz_mod_2exp(p->x_lo, x, p->n2);
+            mpz_mul(p->x_hi, p->x_hi, p->b);
+            mpz_mul(p->x_lo, p->x_lo, p->a);
+            mpz_add(x, p->x_lo, p->x_hi);
+	// gmp_printf("red1 %Zx\n", x);
+            mpz_div_2exp(p->x_hi, x, p->n2);
+            mpz_mod_2exp(p->x_lo, x, p->n2);
+            mpz_mul(p->x_hi, p->x_hi, p->b);
+            mpz_mul(p->x_lo, p->x_lo, p->a);
+            mpz_add(x, p->x_lo, p->x_hi);
+	// gmp_printf("red2 %Zx\n", x);
+        // mpz_mod_fast_reduce(x, tmp, p);
+        mpz_mod_from_montg(x, tmp, p);
+	// gmp_printf("from %Zx\n", x);
+        mpz_mod_slow_reduce(x, p);
+	// gmp_printf("red  %Zx\n", x);
+	assert(mpz_cmp_ui(x, 1) == 0);
+ 	
+        // clears temp structure
+        mpz_mod_uncompute(p);
+
         p = 0;
         mpz_clears(x, ma, mb, tmp, 0);
     }
@@ -1303,6 +1367,7 @@ void cubic_primality_self_test(void)
         printf("Small composites (uint64)\n");
         assert(uint64_cubic_primality(16777265ull) == false);
         assert(uint64_cubic_primality(281474976710683ull) == false);
+        assert(uint64_cubic_primality(0x33a9ffffda54e677) == false);
     }
 
     // ---------------------------------------------------------------------------------
